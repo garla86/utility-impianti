@@ -14,6 +14,8 @@ App web mobile-first per gestire impianti e interventi, con dati salvati localme
 - Stato acceso/spento visibile nelle schede e nell?elenco, ricavato dall?ultima accensione o spegnimento.
 - Pi? contatori energia nominabili per zona, con migrazione automatica delle vecchie letture.
 - Esportazione Excel dei consumi con riepilogo impianti e dettaglio contatori.
+- Filtro Consumi con conteggio e viste Da fare/Completati per la stagione corrente.
+- Azione ?Vedi tutti? in mappa, coerente con tecnico, intervento e stato selezionati.
 
 ## Dati
 

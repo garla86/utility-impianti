@@ -14,7 +14,7 @@ const TYPES = [
 ];
 const blankPlant = { description: '', comune: '', via: '', cap: '', amministratore: '', tecnicoResponsabile: '', active: true };
 const fmt = (date) => new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
-const typeLabel = (id) => TYPES.find(([key]) => key === id)?.[1] || id;
+const typeLabel = (id) => id === 'consumi' ? 'Consumi' : TYPES.find(([key]) => key === id)?.[1] || id;
 const addressOf = (plant) => [plant.via, plant.cap, plant.comune].filter(Boolean).join(', ');
 const mapsUrl = (plant) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addressOf(plant) || plant.description)}`;
 const operatingStatus = (interventions) => {
@@ -36,10 +36,12 @@ export default function App() {
   useEffect(() => saveState(state), [state]);
 
   const technicians = useMemo(() => [...new Set(state.plants.map((p) => p.tecnicoResponsabile).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [state.plants]);
-  const isDone = (plantId, interventionType) => state.interventions.some((item) =>
-    item.plantId === plantId && item.type === interventionType &&
-    item.campaignId === state.activeCampaignByType[interventionType]
-  );
+  const isDone = (plantId, interventionType) => interventionType === 'consumi'
+    ? state.consumptions.some((item) => item.plantId === plantId && item.campaignId === state.activeConsumptionCampaignId)
+    : state.interventions.some((item) =>
+      item.plantId === plantId && item.type === interventionType &&
+      item.campaignId === state.activeCampaignByType[interventionType]
+    );
   const visible = useMemo(() => state.plants.filter((plant) => {
     const matchesTech = state.selectedTechnician === 'Tutti' || plant.tecnicoResponsabile === state.selectedTechnician;
     const q = query.toLowerCase();
@@ -110,7 +112,7 @@ export default function App() {
       <label className="search"><Search size={19}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca nome, via, comune?" />{query && <button onClick={() => setQuery('')} aria-label="Cancella ricerca"><X size={17}/></button>}</label>
     </section>
     <section className="filters">
-      <div className="chips">{[['all', 'Tutti'], ...TYPES].map(([id, label]) => <button className={type === id ? 'chip active' : 'chip'} key={id} onClick={() => { setType(id); if (id === 'all') setStatus('all'); }}>{label}</button>)}</div>
+      <div className="chips">{[['all', 'Tutti'], ...TYPES, ['consumi', 'Consumi']].map(([id, label]) => <button className={type === id ? 'chip active' : 'chip'} key={id} onClick={() => { setType(id); if (id === 'all') setStatus('all'); }}>{label}</button>)}</div>
       {type !== 'all' && <div className="status-tabs"><button className={status === 'all' ? 'selected' : ''} onClick={() => setStatus('all')}>Tutti</button><button className={status === 'todo' ? 'selected' : ''} onClick={() => setStatus('todo')}>Da fare</button><button className={status === 'done' ? 'selected' : ''} onClick={() => setStatus('done')}>Completati</button></div>}
     </section>
     {type !== 'all' && <section className="progress"><div><strong>{typeLabel(type)}</strong><span>{completed} di {progressPool.length} completati</span></div><div className="bar"><i style={{ width: `${progressPool.length ? completed / progressPool.length * 100 : 0}%` }} /></div></section>}
@@ -167,13 +169,12 @@ function SeasonModal({ onClose, onStart }) {
   return <Modal title="Nuova stagione" onClose={onClose}><p className="modal-subtitle">Gli interventi gi? registrati resteranno nello storico. Solo i contatori delle categorie scelte ripartiranno da zero.</p><div className="form"><label>Nome stagione<input value={name} onChange={(e) => setName(e.target.value)}/></label><fieldset><legend>Categorie da riavviare</legend>{TYPES.map(([id, label]) => <label className="check" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)}/>{label}</label>)}</fieldset><div className="modal-actions"><button className="secondary" onClick={onClose}>Annulla</button><button disabled={!name.trim() || !selected.length} onClick={() => { if (window.confirm(`Avviare ?${name}? per ${selected.length} categorie?`)) onStart(name, selected); }}>Avvia stagione</button></div></div></Modal>;
 }
 function MapModal({ plants, technician, type, status, onClose }) {
-  const openAll = () => {
-    const addresses = plants.slice(0, 9).map(addressOf).filter(Boolean);
+  const viewAll = () => {
+    const addresses = plants.slice(0, 25).map(addressOf).filter(Boolean);
     if (!addresses.length) return;
-    const [destination, ...waypoints] = addresses.reverse();
-    window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}${waypoints.length ? `&waypoints=${encodeURIComponent(waypoints.join('|'))}` : ''}`, '_blank', 'noopener');
+    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addresses.join(' | '))}`, '_blank', 'noopener');
   };
-  return <Modal title="Mappa impianti" onClose={onClose}><p className="modal-subtitle">{plants.length} risultati ? {technician}{type !== 'all' ? ` ? ${typeLabel(type)} ${status === 'todo' ? 'da fare' : status === 'done' ? 'completati' : ''}` : ''}</p><button className="route-button" disabled={!plants.length} onClick={openAll}><Navigation size={18}/> Apri itinerario (massimo 9 tappe)</button><div className="map-list">{plants.map((plant) => <a key={plant.id} href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin/><span><strong>{plant.description}</strong><small>{addressOf(plant) || 'Indirizzo non indicato'}</small></span><Navigation size={17}/></a>)}</div></Modal>;
+  return <Modal title="Mappa impianti" onClose={onClose}><p className="modal-subtitle">{plants.length} risultati ? {technician}{type !== 'all' ? ` ? ${typeLabel(type)} ${status === 'todo' ? 'da fare' : status === 'done' ? 'completati' : ''}` : ''}</p><button className="route-button" disabled={!plants.length} onClick={viewAll}><Map size={18}/> Vedi tutti su Google Maps</button><div className="map-list">{plants.map((plant) => <a key={plant.id} href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin/><span><strong>{plant.description}</strong><small>{addressOf(plant) || 'Indirizzo non indicato'}</small></span><Navigation size={17}/></a>)}</div></Modal>;
 }
 function ConsumptionModal({ plant, campaign, current, history, campaigns, onClose, onSave }) {
   const [draft, setDraft] = useState(current || { gasStart: '', gasEnd: '', energyMeters: [{ id: crypto.randomUUID(), zone: 'Contatore 1', start: '', end: '' }] });
