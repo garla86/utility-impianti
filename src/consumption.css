@@ -124,6 +124,124 @@
   font-weight: 750;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: linear-gradient(145deg, #edf7f4, #f7f9f8);
+}
+
+.auth-card {
+  width: min(100%, 410px);
+  padding: 28px;
+  border: 1px solid #d8e5e1;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 16px 40px #173c3412;
+}
+
+.auth-card > svg {
+  color: #0f766e;
+}
+
+.auth-card h1 {
+  margin: 7px 0;
+}
+
+.auth-card > p:not(.eyebrow) {
+  color: #607b75;
+}
+
+.auth-submit {
+  padding: 11px;
+  border-radius: 10px;
+  background: #0f766e;
+  color: #fff;
+  font-weight: 800;
+}
+
+.auth-switch {
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px;
+  background: transparent;
+  color: #0f665c;
+  font-weight: 750;
+}
+
+.intervention:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+}
+
+.readonly-note,
+.sync-banner {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #fff4d9;
+  color: #765b19;
+  font-size: .82rem;
+  font-weight: 750;
+}
+
+.user-invite {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #dce7e4;
+}
+
+.user-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.user-list h3 {
+  margin: 0 0 3px;
+  font-size: .92rem;
+}
+
+.user-list > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 9px;
+  background: #f0f6f4;
+}
+
+.user-list span {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.user-list small {
+  color: #66817b;
+}
+
+.user-list i {
+  padding: 3px 7px;
+  border-radius: 99px;
+  background: #eee;
+  color: #777;
+  font-size: .7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.user-list i.active {
+  background: #ddf5e9;
+  color: #13704a;
+}
+
+.sync-banner {
+  position: fixed;
+  z-index: 9;
+  right: 16px;
+  bottom: 16px;
+}
+
 .map-overview {
   margin-bottom: 13px;
   padding: 8px;

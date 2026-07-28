@@ -25,6 +25,20 @@ App web mobile-first per gestire impianti e interventi, con dati salvati localme
 
 La chiave `localStorage` resta `utility-impianti-v1`. Al primo avvio i vecchi interventi vengono associati alla campagna ?Dati precedenti?; impianti, tecnico selezionato e cronologia restano invariati.
 
+## V2 condivisa ? configurazione
+
+1. Eseguire `supabase/schema.sql` nel SQL Editor del progetto Supabase.
+2. In Vercel configurare:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SECRET_KEY` (solo nelle funzioni server; non usare mai nel client)
+3. Creare dall?app il primo account con `graziano.garlaschelli@cfsfacility.it`.
+4. Confermare l?email, accedere e disabilitare le nuove registrazioni pubbliche in Supabase Auth.
+5. Usare **Impostazioni ? Migra dati V1** una sola volta sul dispositivo che contiene l?archivio completo.
+6. Invitare i tecnici da **Impostazioni ? Gestione utenti**.
+
+Tutti gli utenti autenticati possono consultare tutti gli impianti. Le policy RLS consentono a un tecnico di registrare interventi e consumi soltanto sugli impianti assegnati; l?amministratore pu? gestire tutto.
+
 ## Sviluppo
 
 ```bash
