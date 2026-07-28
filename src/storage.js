@@ -1,5 +1,5 @@
 const KEY = 'utility-impianti-v1';
-export const ALL_TYPES = ['manutenzione', 'verifica', 'prova-fumi', 'accensione', 'spegnimento', 'altro'];
+export const ALL_TYPES = ['manutenzione', 'verifica', 'prova-fumi', 'preaccensione', 'accensione', 'spegnimento'];
 const initialCampaign = () => ({
   id: 'legacy',
   name: 'Dati precedenti',
@@ -7,8 +7,9 @@ const initialCampaign = () => ({
   categories: [...ALL_TYPES]
 });
 export const emptyState = {
-  version: 2, plants: [], interventions: [], selectedTechnician: 'Tutti',
+  version: 3, plants: [], interventions: [], consumptions: [], selectedTechnician: 'Tutti',
   campaigns: [initialCampaign()], activeCampaignByType: Object.fromEntries(ALL_TYPES.map((type) => [type, 'legacy'])),
+  activeConsumptionCampaignId: 'legacy',
   preferences: { view: 'cards' }
 };
 
@@ -21,7 +22,9 @@ export function migrateState(saved) {
     campaignId: item.campaignId || activeCampaignByType[item.type] || 'legacy'
   }));
   return {
-    ...emptyState, ...saved, version: 2, campaigns, activeCampaignByType, interventions,
+    ...emptyState, ...saved, version: 3, campaigns, activeCampaignByType, interventions,
+    consumptions: Array.isArray(saved.consumptions) ? saved.consumptions : [],
+    activeConsumptionCampaignId: saved.activeConsumptionCampaignId || 'legacy',
     preferences: { ...emptyState.preferences, ...(saved.preferences || {}) }
   };
 }
@@ -31,10 +34,10 @@ export function loadState() {
   catch { return emptyState; }
 }
 export function saveState(state) {
-  localStorage.setItem(KEY, JSON.stringify({ ...state, version: 2, savedAt: new Date().toISOString() }));
+  localStorage.setItem(KEY, JSON.stringify({ ...state, version: 3, savedAt: new Date().toISOString() }));
 }
 export function downloadBackup(state) {
-  const blob = new Blob([JSON.stringify({ ...state, version: 2, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ ...state, version: 3, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' });
   const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `utility-impianti-backup-${new Date().toISOString().slice(0, 10)}.json` });
   link.click(); URL.revokeObjectURL(link.href);
 }

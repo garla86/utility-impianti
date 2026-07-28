@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArchiveRestore, ChevronDown, Download, FileSpreadsheet, Grid2X2, History, Info,
+  ArchiveRestore, ChevronDown, Download, FileSpreadsheet, Gauge, Grid2X2, History, Info,
   List, Map, MapPin, Menu, Navigation, Pencil, Plus, RotateCcw, Search, Settings,
   Upload, UserRound, Wrench, X
 } from 'lucide-react';
@@ -9,7 +9,7 @@ import { ALL_TYPES, downloadBackup, loadState, migrateState, saveState } from '.
 
 const TYPES = [
   ['manutenzione', 'Manutenzione'], ['verifica', 'Verifica'], ['prova-fumi', 'Prova fumi'],
-  ['accensione', 'Accensione'], ['spegnimento', 'Spegnimento'], ['altro', 'Altro']
+  ['preaccensione', 'Preaccensione'], ['accensione', 'Accensione'], ['spegnimento', 'Spegnimento']
 ];
 const blankPlant = { description: '', comune: '', via: '', cap: '', amministratore: '', tecnicoResponsabile: '', active: true };
 const fmt = (date) => new Intl.DateTimeFormat('it-IT', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(date));
@@ -24,6 +24,7 @@ export default function App() {
   const [status, setStatus] = useState('all');
   const [editing, setEditing] = useState(null);
   const [historyPlant, setHistoryPlant] = useState(null);
+  const [consumptionPlant, setConsumptionPlant] = useState(null);
   const [panel, setPanel] = useState(null);
   const [notice, setNotice] = useState('');
   const excelInput = useRef(); const backupInput = useRef();
@@ -81,11 +82,18 @@ export default function App() {
     const campaign = { id, name: name.trim(), startedAt: new Date().toISOString(), categories };
     setState((current) => ({
       ...current, campaigns: [campaign, ...current.campaigns],
-      activeCampaignByType: { ...current.activeCampaignByType, ...Object.fromEntries(categories.map((category) => [category, id])) }
+      activeCampaignByType: { ...current.activeCampaignByType, ...Object.fromEntries(categories.map((category) => [category, id])) },
+      activeConsumptionCampaignId: id
     }));
     setPanel(null); flash(`Nuova stagione avviata per ${categories.length} categorie.`);
   };
   const setView = (view) => setState((current) => ({ ...current, preferences: { ...current.preferences, view } }));
+  const saveConsumption = (values) => {
+    const key = `${consumptionPlant.id}:${state.activeConsumptionCampaignId}`;
+    const entry = { ...values, id: key, plantId: consumptionPlant.id, campaignId: state.activeConsumptionCampaignId, updatedAt: new Date().toISOString() };
+    setState((current) => ({ ...current, consumptions: [...current.consumptions.filter((item) => item.id !== key), entry] }));
+    setConsumptionPlant(null); flash('Letture consumi salvate.');
+  };
 
   return <main className="app-shell">
     <header className="topbar">
@@ -107,8 +115,8 @@ export default function App() {
     </section>
     <section className={state.preferences.view === 'list' ? 'plant-list compact' : 'plant-list'}>
       {visible.map((plant) => state.preferences.view === 'list'
-        ? <PlantRow key={plant.id} plant={plant} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)}/>
-        : <PlantCard key={plant.id} plant={plant} interventions={state.interventions.filter((item) => item.plantId === plant.id && item.campaignId === state.activeCampaignByType[item.type])} onRecord={record} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)}/>)}
+        ? <PlantRow key={plant.id} plant={plant} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>
+        : <PlantCard key={plant.id} plant={plant} interventions={state.interventions.filter((item) => item.plantId === plant.id && item.campaignId === state.activeCampaignByType[item.type])} onRecord={record} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>)}
       {!visible.length && <div className="empty"><FileSpreadsheet size={35}/><h2>Nessun impianto trovato</h2><p>Importa il tuo Excel o modifica i filtri.</p></div>}
     </section>
     <input ref={excelInput} type="file" accept=".xlsx,.xls,.csv" hidden onChange={importExcel}/>
@@ -116,18 +124,19 @@ export default function App() {
     {notice && <div className="toast">{notice}</div>}
     {editing && <PlantEditor plant={editing} technicians={technicians} onClose={() => setEditing(null)} onSave={savePlant}/>}
     {historyPlant && <HistoryModal plant={historyPlant} interventions={state.interventions.filter((item) => item.plantId === historyPlant.id)} campaigns={state.campaigns} onClose={() => setHistoryPlant(null)} onDelete={(id) => setState((current) => ({ ...current, interventions: current.interventions.filter((item) => item.id !== id) }))}/>}
+    {consumptionPlant && <ConsumptionModal plant={consumptionPlant} campaign={state.campaigns.find((item) => item.id === state.activeConsumptionCampaignId)} current={state.consumptions.find((item) => item.plantId === consumptionPlant.id && item.campaignId === state.activeConsumptionCampaignId)} history={state.consumptions.filter((item) => item.plantId === consumptionPlant.id)} campaigns={state.campaigns} onClose={() => setConsumptionPlant(null)} onSave={saveConsumption}/>}
     {panel === 'settings' && <SettingsModal state={state} technicians={technicians} onClose={() => setPanel(null)} onTechnician={(value) => setState((current) => ({ ...current, selectedTechnician: value }))} onExcel={() => excelInput.current.click()} onExport={() => downloadBackup(state)} onRestore={() => backupInput.current.click()} onSeason={() => setPanel('season')} onMap={() => setPanel('map')}/>}
     {panel === 'season' && <SeasonModal onClose={() => setPanel('settings')} onStart={startSeason}/>}
     {panel === 'map' && <MapModal plants={visible} technician={state.selectedTechnician} type={type} status={status} onClose={() => setPanel(null)}/>}
   </main>;
 }
 
-function PlantCard({ plant, interventions, onRecord, onEdit, onHistory }) {
+function PlantCard({ plant, interventions, onRecord, onEdit, onHistory, onConsumption }) {
   const done = (id) => interventions.find((item) => item.type === id);
-  return <article className="plant-card"><PlantHeading plant={plant} onEdit={onEdit} onHistory={onHistory}/><div className="interventions">{TYPES.map(([id, label]) => <button key={id} className={done(id) ? 'intervention done' : 'intervention'} onClick={() => onRecord(plant, id)} title={done(id) ? `Ultima registrazione: ${fmt(done(id).date)}` : `Registra ${label}`}><span>{done(id) ? '?' : '+'}</span>{label}</button>)}</div></article>;
+  return <article className="plant-card"><PlantHeading plant={plant} onEdit={onEdit} onHistory={onHistory}/><div className="interventions">{TYPES.map(([id, label]) => <button key={id} className={done(id) ? 'intervention done' : 'intervention'} onClick={() => onRecord(plant, id)} title={done(id) ? `Ultima registrazione: ${fmt(done(id).date)}` : `Registra ${label}`}><span>{done(id) ? '?' : '+'}</span>{label}</button>)}</div><button className="consumption-button" onClick={onConsumption}><Gauge size={17}/> Consumi</button></article>;
 }
-function PlantRow({ plant, onEdit, onHistory }) {
-  return <article className="plant-row"><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><h2>{plant.description}</h2><p><MapPin size={14}/>{addressOf(plant) || 'Indirizzo non indicato'}</p><small>{plant.tecnicoResponsabile}</small></a><div className="card-actions"><button onClick={onEdit} aria-label="Modifica"><Pencil size={16}/></button><button onClick={onHistory} aria-label="Storico"><History size={17}/></button></div></article>;
+function PlantRow({ plant, onEdit, onHistory, onConsumption }) {
+  return <article className="plant-row"><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><h2>{plant.description}</h2><p><MapPin size={14}/>{addressOf(plant) || 'Indirizzo non indicato'}</p><small>{plant.tecnicoResponsabile}</small></a><div className="card-actions"><button onClick={onConsumption} aria-label="Consumi"><Gauge size={16}/></button><button onClick={onEdit} aria-label="Modifica"><Pencil size={16}/></button><button onClick={onHistory} aria-label="Storico"><History size={17}/></button></div></article>;
 }
 function PlantHeading({ plant, onEdit, onHistory }) {
   return <div className="plant-title"><div><h2>{plant.description}</h2><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin size={15}/>{addressOf(plant) || 'Indirizzo non indicato'}</a><small>{plant.tecnicoResponsabile}</small></div><div className="card-actions"><button aria-label="Modifica impianto" onClick={onEdit}><Pencil size={17}/></button><button aria-label="Vedi storico" onClick={onHistory}><History size={18}/></button></div></div>;
@@ -159,6 +168,25 @@ function MapModal({ plants, technician, type, status, onClose }) {
   };
   return <Modal title="Mappa impianti" onClose={onClose}><p className="modal-subtitle">{plants.length} risultati ? {technician}{type !== 'all' ? ` ? ${typeLabel(type)} ${status === 'todo' ? 'da fare' : status === 'done' ? 'completati' : ''}` : ''}</p><button className="route-button" disabled={!plants.length} onClick={openAll}><Navigation size={18}/> Apri itinerario (massimo 9 tappe)</button><div className="map-list">{plants.map((plant) => <a key={plant.id} href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin/><span><strong>{plant.description}</strong><small>{addressOf(plant) || 'Indirizzo non indicato'}</small></span><Navigation size={17}/></a>)}</div></Modal>;
 }
+function ConsumptionModal({ plant, campaign, current, history, campaigns, onClose, onSave }) {
+  const [draft, setDraft] = useState(current || { gasStart: '', gasEnd: '', energyStart: '', energyEnd: '' });
+  const set = (key, value) => setDraft((item) => ({ ...item, [key]: value }));
+  const numeric = (value) => value === '' ? '' : Number(value);
+  return <Modal title={`Consumi ? ${plant.description}`} onClose={onClose}>
+    <p className="modal-subtitle">Periodo: <strong>{campaign?.name || 'Dati precedenti'}</strong>. Inserisci le letture cumulative riportate sui contatori.</p>
+    <form className="form consumption-form" onSubmit={(event) => { event.preventDefault(); onSave({ gasStart: numeric(draft.gasStart), gasEnd: numeric(draft.gasEnd), energyStart: numeric(draft.energyStart), energyEnd: numeric(draft.energyEnd) }); }}>
+      <label>Gas inizio stagione (m?)<input type="number" inputMode="decimal" min="0" step="0.001" value={draft.gasStart} onChange={(event) => set('gasStart', event.target.value)}/></label>
+      <label>Gas fine stagione (m?)<input type="number" inputMode="decimal" min="0" step="0.001" value={draft.gasEnd} onChange={(event) => set('gasEnd', event.target.value)}/></label>
+      <label>Energia inizio stagione (MWh)<input type="number" inputMode="decimal" min="0" step="0.001" value={draft.energyStart} onChange={(event) => set('energyStart', event.target.value)}/></label>
+      <label>Energia fine stagione (MWh)<input type="number" inputMode="decimal" min="0" step="0.001" value={draft.energyEnd} onChange={(event) => set('energyEnd', event.target.value)}/></label>
+      <div className="consumption-totals"><span>Gas consumato <strong>{difference(draft.gasEnd, draft.gasStart)} m?</strong></span><span>Energia consumata <strong>{difference(draft.energyEnd, draft.energyStart)} MWh</strong></span></div>
+      <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annulla</button><button type="submit">Salva letture</button></div>
+    </form>
+    {history.filter((item) => item.campaignId !== current?.campaignId).length > 0 && <div className="consumption-history"><h3>Periodi precedenti</h3>{history.filter((item) => item.campaignId !== current?.campaignId).map((item) => <div key={item.id}><strong>{campaigns.find((campaignItem) => campaignItem.id === item.campaignId)?.name || 'Dati precedenti'}</strong><span>Gas: {displayReading(item.gasStart)} ? {displayReading(item.gasEnd)} m?</span><span>Energia: {displayReading(item.energyStart)} ? {displayReading(item.energyEnd)} MWh</span></div>)}</div>}
+  </Modal>;
+}
+const displayReading = (value) => value === '' || value == null ? '?' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 3 }).format(value);
+const difference = (end, start) => end !== '' && start !== '' && Number(end) >= Number(start) ? displayReading(Number(end) - Number(start)) : '?';
 function PlantEditor({ plant, technicians, onClose, onSave }) {
   const [draft, setDraft] = useState(plant); const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   return <Modal title={plant.id ? 'Modifica impianto' : 'Nuovo impianto'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave(draft); }} className="form"><Field label="Descrizione *" value={draft.description} onChange={(value) => set('description', value)} required/><Field label="Comune" value={draft.comune} onChange={(value) => set('comune', value)}/><Field label="Via / Indirizzo" value={draft.via} onChange={(value) => set('via', value)}/><Field label="CAP" value={draft.cap} onChange={(value) => set('cap', value)}/><Field label="Amministratore" value={draft.amministratore} onChange={(value) => set('amministratore', value)}/><label>Tecnico responsabile<input list="technicians" value={draft.tecnicoResponsabile} onChange={(e) => set('tecnicoResponsabile', e.target.value)} required/><datalist id="technicians">{technicians.map((tech) => <option key={tech} value={tech}/>)}</datalist></label><label className="check"><input type="checkbox" checked={draft.active} onChange={(e) => set('active', e.target.checked)}/> Impianto attivo</label><div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annulla</button><button type="submit">Salva impianto</button></div></form></Modal>;

@@ -1,0 +1,69 @@
+.consumption-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 9px;
+  border-radius: 9px;
+  background: #eef4f2;
+  color: #0f665c;
+  font-weight: 750;
+}
+
+.consumption-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.consumption-totals {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.consumption-totals span {
+  display: grid;
+  gap: 3px;
+  padding: 11px;
+  border-radius: 10px;
+  background: #e6f5f1;
+  color: #486862;
+  font-size: .82rem;
+}
+
+.consumption-totals strong {
+  color: #0f665c;
+  font-size: 1rem;
+}
+
+.consumption-history {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid #dce7e4;
+}
+
+.consumption-history h3 {
+  margin: 0 0 8px;
+  font-size: .9rem;
+}
+
+.consumption-history > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px 0;
+  border-bottom: 1px solid #e6edeb;
+  font-size: .82rem;
+}
+
+.consumption-history span {
+  color: #607b75;
+}
+
+@media (max-width: 480px) {
+  .consumption-form,
+  .consumption-totals {
+    grid-template-columns: 1fr;
+  }
+}

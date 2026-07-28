@@ -9,6 +9,8 @@ App web mobile-first per gestire impianti e interventi, con dati salvati localme
 - Vista mappa filtrata con collegamenti di navigazione e itinerario fino a 9 tappe.
 - Menu Impostazioni per tecnico, Excel, backup, nuova stagione, mappa e informazioni.
 - Migrazione automatica e compatibile dei dati e backup della V1.
+- Pulsante Preaccensione al posto di Altro.
+- Letture consumi per stagione: gas iniziale/finale in m? ed energia iniziale/finale in MWh.
 
 ## Dati
 

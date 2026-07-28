@@ -10,11 +10,13 @@ describe('migrazione dati V1', () => {
       selectedTechnician: 'Paolo'
     };
     const migrated = migrateState(old);
-    expect(migrated.version).toBe(2);
+    expect(migrated.version).toBe(3);
     expect(migrated.plants).toEqual(old.plants);
     expect(migrated.selectedTechnician).toBe('Paolo');
     expect(migrated.interventions[0].campaignId).toBe('legacy');
     expect(migrated.activeCampaignByType.manutenzione).toBe('legacy');
+    expect(migrated.consumptions).toEqual([]);
+    expect(migrated.activeConsumptionCampaignId).toBe('legacy');
   });
 
   it('completa le categorie mancanti senza alterare quelle presenti', () => {
