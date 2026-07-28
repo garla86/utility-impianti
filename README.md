@@ -1,34 +1,47 @@
-# Utility Impianti — Versione 1
+# Utility Impianti ? Versione 1.1
 
-App web pensata per smartphone per registrare gli interventi sugli impianti. Questa prima versione salva tutto **nel browser del dispositivo**: non serve un account e non richiede servizi a pagamento.
+App web mobile-first per gestire impianti e interventi, con dati salvati localmente nel browser.
 
-## Funzioni incluse
+## Novit? 1.1
 
-- Importazione Excel/CSV con queste colonne: `Descrizione`, `Comune`, `Via`, `CAP`, `Amministratore`, `Tecnico responsabile`.
-- Ricerca per nome, indirizzo, comune, CAP o amministratore.
-- Filtro per tecnico, tipo di intervento e stato (da fare/completato).
-- Registrazione immediata di manutenzione, verifica, prova fumi, accensione, spegnimento e altro, con data e ora automatiche.
-- Cronologia per impianto, modificabile in caso di errore.
-- Creazione e modifica manuale degli impianti, compreso il cambio di tecnico.
-- Backup JSON e ripristino: fare una copia periodica del file scaricato.
-- PWA installabile su iPhone/Android e pronta per Vercel.
+- Nuove stagioni/campagne selettive: i contatori ripartono senza eliminare lo storico.
+- Vista a schede e vista elenco compatta.
+- Vista mappa filtrata con collegamenti di navigazione e itinerario fino a 9 tappe.
+- Menu Impostazioni per tecnico, Excel, backup, nuova stagione, mappa e informazioni.
+- Migrazione automatica e compatibile dei dati e backup della V1.
+- Pulsante Preaccensione al posto di Altro.
+- Letture consumi per stagione: gas iniziale/finale in m? ed energia iniziale/finale in MWh.
+- Stato acceso/spento visibile nelle schede e nell?elenco, ricavato dall?ultima accensione o spegnimento.
+- Pi? contatori energia nominabili per zona, con migrazione automatica delle vecchie letture.
+- Esportazione Excel dei consumi con riepilogo impianti e dettaglio contatori.
+- Filtro Consumi con conteggio e viste Da fare/Completati per la stagione corrente.
+- Azione ?Vedi tutti? in mappa, coerente con tecnico, intervento e stato selezionati.
+- Filtri adattivi su pi? righe, senza categorie tagliate.
+- Mappa interna con marcatori per tutti gli impianti filtrati e geocodifica progressiva memorizzata localmente.
+- Accesso amministratore locale: solo l?amministratore gestisce anagrafica, stagioni e report consumi.
+- Selettore tecnico ridimensionato per evitare sovrapposizioni con la ricerca.
 
-## Avvio sul computer
+## Dati
 
-1. Installa [Node.js](https://nodejs.org/) versione LTS.
-2. Apri una finestra del terminale nella cartella del progetto.
-3. Esegui `npm install` una sola volta.
-4. Esegui `npm run dev` e apri l’indirizzo mostrato.
+La chiave `localStorage` resta `utility-impianti-v1`. Al primo avvio i vecchi interventi vengono associati alla campagna ?Dati precedenti?; impianti, tecnico selezionato e cronologia restano invariati.
 
-## Pubblicazione con GitHub e Vercel
+## V2 condivisa ? configurazione
 
-1. Crea un repository GitHub chiamato `utility-impianti` e carica questi file.
-2. Su Vercel scegli **Add New → Project**, quindi importa il repository.
-3. Lascia invariati i valori proposti (Vite rilevato automaticamente) e premi **Deploy**.
-4. Sul telefono apri il link Vercel con Safari/Chrome e scegli **Aggiungi alla schermata Home**.
+1. Eseguire `supabase/schema.sql` nel SQL Editor del progetto Supabase.
+2. In Vercel configurare:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_SECRET_KEY` (solo nelle funzioni server; non usare mai nel client)
+3. Creare dall?app il primo account con `graziano.garlaschelli@cfsfacility.it`.
+4. Confermare l?email, accedere e disabilitare le nuove registrazioni pubbliche in Supabase Auth.
+5. Usare **Impostazioni ? Migra dati V1** una sola volta sul dispositivo che contiene l?archivio completo.
+6. Invitare i tecnici da **Impostazioni ? Gestione utenti**.
 
-Ogni modifica inviata su GitHub verrà pubblicata automaticamente da Vercel.
+Tutti gli utenti autenticati possono consultare tutti gli impianti. Le policy RLS consentono a un tecnico di registrare interventi e consumi soltanto sugli impianti assegnati; l?amministratore pu? gestire tutto.
 
-## Importante: dati e backup
+## Sviluppo
 
-I dati restano nel browser del telefono o PC utilizzato. Non si sincronizzano fra dispositivi in questa V1. Usa regolarmente **Esporta backup** e conserva il file JSON in un luogo sicuro. In futuro quel backup potrà essere migrato alla versione condivisa con database.
+```bash
+npm install
+npm run build
+```
