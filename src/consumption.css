@@ -61,9 +61,139 @@
   color: #607b75;
 }
 
+.row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.row-title h2 {
+  margin-bottom: 0;
+}
+
+.operating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: max-content;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #edf1f0;
+  color: #63736f;
+  font-size: .68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.operating-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #83918e;
+}
+
+.operating-badge.on {
+  background: #ddf5e9;
+  color: #13704a;
+}
+
+.operating-badge.on i {
+  background: #19a564;
+  box-shadow: 0 0 0 3px #19a56420;
+}
+
+.operating-badge.off {
+  background: #f6e8e8;
+  color: #9a3e3e;
+}
+
+.operating-badge.off i {
+  background: #c44d4d;
+}
+
+.energy-meters {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 9px;
+}
+
+.energy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.energy-head > div {
+  display: grid;
+  gap: 2px;
+}
+
+.energy-head small {
+  color: #66817b;
+}
+
+.energy-head button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: #e5f2ef;
+  color: #0f665c;
+  font-weight: 800;
+}
+
+.energy-meter {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d8e5e1;
+  border-radius: 11px;
+  background: #f8fbfa;
+}
+
+.meter-result {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 39px;
+}
+
+.meter-result span {
+  color: #0f665c;
+  font-size: .78rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.meter-result button {
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: #f5e5e5;
+  color: #a03939;
+  font-size: 1.15rem;
+}
+
 @media (max-width: 480px) {
   .consumption-form,
   .consumption-totals {
     grid-template-columns: 1fr;
+  }
+
+  .energy-meter {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .energy-meter label:first-child,
+  .meter-result {
+    grid-column: 1 / -1;
+  }
+
+  .meter-result {
+    justify-content: space-between;
   }
 }

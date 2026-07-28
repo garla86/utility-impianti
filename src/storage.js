@@ -23,7 +23,14 @@ export function migrateState(saved) {
   }));
   return {
     ...emptyState, ...saved, version: 3, campaigns, activeCampaignByType, interventions,
-    consumptions: Array.isArray(saved.consumptions) ? saved.consumptions : [],
+    consumptions: Array.isArray(saved.consumptions) ? saved.consumptions.map((item) => ({
+      ...item,
+      energyMeters: Array.isArray(item.energyMeters) ? item.energyMeters : (
+        item.energyStart !== undefined || item.energyEnd !== undefined
+          ? [{ id: `${item.id || 'legacy'}-energy-1`, zone: 'Contatore 1', start: item.energyStart ?? '', end: item.energyEnd ?? '' }]
+          : []
+      )
+    })) : [],
     activeConsumptionCampaignId: saved.activeConsumptionCampaignId || 'legacy',
     preferences: { ...emptyState.preferences, ...(saved.preferences || {}) }
   };

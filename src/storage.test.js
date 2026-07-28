@@ -27,4 +27,15 @@ describe('migrazione dati V1', () => {
     expect(migrated.activeCampaignByType.manutenzione).toBe('c1');
     expect(Object.keys(migrated.activeCampaignByType)).toEqual(expect.arrayContaining(ALL_TYPES));
   });
+
+  it('converte la vecchia lettura energia in un contatore nominato', () => {
+    const migrated = migrateState({
+      plants: [], interventions: [], consumptions: [{
+        id: 'p1:legacy', plantId: 'p1', campaignId: 'legacy', energyStart: 10, energyEnd: 15
+      }]
+    });
+    expect(migrated.consumptions[0].energyMeters).toEqual([expect.objectContaining({
+      zone: 'Contatore 1', start: 10, end: 15
+    })]);
+  });
 });
