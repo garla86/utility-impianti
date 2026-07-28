@@ -61,6 +61,41 @@
   color: #607b75;
 }
 
+.chips {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.map-overview {
+  margin-bottom: 13px;
+  padding: 8px;
+  border: 1px solid #d8e5e1;
+  border-radius: 12px;
+  background: #f8fbfa;
+}
+
+.map-canvas {
+  width: 100%;
+  height: min(52vh, 430px);
+  min-height: 300px;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.map-overview p {
+  margin: 8px 2px 2px;
+  color: #315852;
+  font-size: .82rem;
+  font-weight: 750;
+}
+
+.map-overview > small {
+  display: block;
+  margin: 0 2px 3px;
+  color: #69827d;
+  line-height: 1.35;
+}
+
 .row-title {
   display: flex;
   align-items: center;
@@ -179,6 +214,15 @@
 }
 
 @media (max-width: 480px) {
+  .chips {
+    gap: 6px;
+  }
+
+  .chip {
+    padding: 7px 9px;
+    font-size: .78rem;
+  }
+
   .consumption-form,
   .consumption-totals {
     grid-template-columns: 1fr;

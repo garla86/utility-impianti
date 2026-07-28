@@ -169,12 +169,68 @@ function SeasonModal({ onClose, onStart }) {
   return <Modal title="Nuova stagione" onClose={onClose}><p className="modal-subtitle">Gli interventi gi? registrati resteranno nello storico. Solo i contatori delle categorie scelte ripartiranno da zero.</p><div className="form"><label>Nome stagione<input value={name} onChange={(e) => setName(e.target.value)}/></label><fieldset><legend>Categorie da riavviare</legend>{TYPES.map(([id, label]) => <label className="check" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)}/>{label}</label>)}</fieldset><div className="modal-actions"><button className="secondary" onClick={onClose}>Annulla</button><button disabled={!name.trim() || !selected.length} onClick={() => { if (window.confirm(`Avviare ?${name}? per ${selected.length} categorie?`)) onStart(name, selected); }}>Avvia stagione</button></div></div></Modal>;
 }
 function MapModal({ plants, technician, type, status, onClose }) {
-  const viewAll = () => {
-    const addresses = plants.slice(0, 25).map(addressOf).filter(Boolean);
-    if (!addresses.length) return;
-    window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addresses.join(' | '))}`, '_blank', 'noopener');
-  };
-  return <Modal title="Mappa impianti" onClose={onClose}><p className="modal-subtitle">{plants.length} risultati ? {technician}{type !== 'all' ? ` ? ${typeLabel(type)} ${status === 'todo' ? 'da fare' : status === 'done' ? 'completati' : ''}` : ''}</p><button className="route-button" disabled={!plants.length} onClick={viewAll}><Map size={18}/> Vedi tutti su Google Maps</button><div className="map-list">{plants.map((plant) => <a key={plant.id} href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin/><span><strong>{plant.description}</strong><small>{addressOf(plant) || 'Indirizzo non indicato'}</small></span><Navigation size={17}/></a>)}</div></Modal>;
+  const [showMap, setShowMap] = useState(false);
+  return <Modal title="Mappa impianti" onClose={onClose}><p className="modal-subtitle">{plants.length} risultati ? {technician}{type !== 'all' ? ` ? ${typeLabel(type)} ${status === 'todo' ? 'da fare' : status === 'done' ? 'completati' : ''}` : ''}</p><button className="route-button" disabled={!plants.length} onClick={() => setShowMap((value) => !value)}><Map size={18}/> {showMap ? 'Nascondi mappa' : 'Vedi tutti'}</button>{showMap && <MapOverview plants={plants}/>}<div className="map-list">{plants.map((plant) => <a key={plant.id} href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin/><span><strong>{plant.description}</strong><small>{addressOf(plant) || 'Indirizzo non indicato'}</small></span><Navigation size={17}/></a>)}</div></Modal>;
+}
+function MapOverview({ plants }) {
+  const element = useRef(null);
+  const [progress, setProgress] = useState({ found: 0, checked: 0, total: plants.length, error: '' });
+  useEffect(() => {
+    let cancelled = false; let map;
+    const run = async () => {
+      try {
+        const L = await loadLeaflet();
+        if (cancelled || !element.current) return;
+        map = L.map(element.current).setView([45.1, 9.1], 8);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+        const points = []; const cache = readGeocodeCache();
+        for (let index = 0; index < plants.length && !cancelled; index += 1) {
+          const plant = plants[index]; const address = `${addressOf(plant)}, Italia`;
+          let coordinates = cache[address];
+          if (!coordinates && addressOf(plant)) {
+            const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=it&q=${encodeURIComponent(address)}`, { headers: { Accept: 'application/json' } });
+            if (response.ok) {
+              const result = (await response.json())[0];
+              coordinates = result ? [Number(result.lat), Number(result.lon)] : null;
+              cache[address] = coordinates; writeGeocodeCache(cache);
+            }
+            if (index < plants.length - 1) await new Promise((resolve) => window.setTimeout(resolve, 1050));
+          }
+          if (coordinates) {
+            points.push(coordinates);
+            const popup = document.createElement('div');
+            const title = document.createElement('strong'); title.textContent = plant.description;
+            const detail = document.createElement('div'); detail.textContent = addressOf(plant);
+            popup.append(title, detail);
+            L.marker(coordinates).addTo(map).bindPopup(popup);
+            if (points.length === 1) map.setView(coordinates, 13); else map.fitBounds(points, { padding: [24, 24], maxZoom: 15 });
+          }
+          setProgress({ found: points.length, checked: index + 1, total: plants.length, error: '' });
+        }
+      } catch {
+        if (!cancelled) setProgress((value) => ({ ...value, error: 'Impossibile caricare la mappa. Controlla la connessione e riprova.' }));
+      }
+    };
+    run();
+    return () => { cancelled = true; if (map) map.remove(); };
+  }, [plants]);
+  return <section className="map-overview"><div ref={element} className="map-canvas"/><p>{progress.error || `${progress.found} impianti posizionati ? ${progress.checked} di ${progress.total} controllati`}</p><small>Al primo utilizzo gli indirizzi vengono localizzati progressivamente e poi conservati sul dispositivo.</small></section>;
+}
+function readGeocodeCache() { try { return JSON.parse(localStorage.getItem('utility-impianti-geocodes-v1')) || {}; } catch { return {}; } }
+function writeGeocodeCache(cache) { localStorage.setItem('utility-impianti-geocodes-v1', JSON.stringify(cache)); }
+let leafletPromise;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletPromise) return leafletPromise;
+  leafletPromise = new Promise((resolve, reject) => {
+    if (!document.querySelector('link[data-leaflet]')) {
+      const style = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' });
+      style.dataset.leaflet = 'true'; document.head.appendChild(style);
+    }
+    const script = Object.assign(document.createElement('script'), { src: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', crossOrigin: '' });
+    script.onload = () => resolve(window.L); script.onerror = reject; document.head.appendChild(script);
+  });
+  return leafletPromise;
 }
 function ConsumptionModal({ plant, campaign, current, history, campaigns, onClose, onSave }) {
   const [draft, setDraft] = useState(current || { gasStart: '', gasEnd: '', energyMeters: [{ id: crypto.randomUUID(), zone: 'Contatore 1', start: '', end: '' }] });

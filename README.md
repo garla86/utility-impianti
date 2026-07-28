@@ -16,6 +16,8 @@ App web mobile-first per gestire impianti e interventi, con dati salvati localme
 - Esportazione Excel dei consumi con riepilogo impianti e dettaglio contatori.
 - Filtro Consumi con conteggio e viste Da fare/Completati per la stagione corrente.
 - Azione ?Vedi tutti? in mappa, coerente con tecnico, intervento e stato selezionati.
+- Filtri adattivi su pi? righe, senza categorie tagliate.
+- Mappa interna con marcatori per tutti gli impianti filtrati e geocodifica progressiva memorizzata localmente.
 
 ## Dati
 
