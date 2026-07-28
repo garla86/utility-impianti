@@ -77,10 +77,13 @@ export async function cloudSavePlant(plant, profiles) {
 }
 
 export async function cloudImportPlants(plants, profiles) {
+  const profileByTechnician = new Map(profiles
+    .filter((item) => item.technician_name)
+    .map((item) => [item.technician_name.trim().toLocaleLowerCase('it'), item]));
   const rows = plants.map((plant) => ({
     id: plant.id, description: plant.description, comune: plant.comune || '', via: plant.via || '', cap: plant.cap || '',
     amministratore: plant.amministratore || '', technician_name: plant.tecnicoResponsabile || 'Non assegnato',
-    assigned_to: profiles.find((item) => item.technician_name === plant.tecnicoResponsabile)?.id || null,
+    assigned_to: profileByTechnician.get((plant.tecnicoResponsabile || '').trim().toLocaleLowerCase('it'))?.id || null,
     active: plant.active !== false, created_at: plant.createdAt || new Date().toISOString(), updated_at: new Date().toISOString()
   }));
   for (let index = 0; index < rows.length; index += 250) {
