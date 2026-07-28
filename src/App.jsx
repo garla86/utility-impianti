@@ -7,6 +7,7 @@ import {
 import { readPlantsFromExcel } from './excel';
 import { ALL_TYPES, downloadBackup, loadState, migrateState, saveState } from './storage';
 import { downloadConsumptions } from './consumptionExport';
+import { isAdminSession, loginAdmin, logoutAdmin } from './admin';
 
 const TYPES = [
   ['manutenzione', 'Manutenzione'], ['verifica', 'Verifica'], ['prova-fumi', 'Prova fumi'],
@@ -32,6 +33,7 @@ export default function App() {
   const [consumptionPlant, setConsumptionPlant] = useState(null);
   const [panel, setPanel] = useState(null);
   const [notice, setNotice] = useState('');
+  const [isAdmin, setIsAdmin] = useState(isAdminSession);
   const excelInput = useRef(); const backupInput = useRef();
   useEffect(() => saveState(state), [state]);
 
@@ -61,11 +63,13 @@ export default function App() {
     flash(`${typeLabel(interventionType)} registrata.`);
   };
   const savePlant = (plant) => {
+    if (!isAdmin) return flash('Accesso amministratore richiesto.');
     const prepared = { ...plant, id: plant.id || crypto.randomUUID(), active: plant.active !== false, createdAt: plant.createdAt || new Date().toISOString() };
     setState((current) => ({ ...current, plants: current.plants.some((item) => item.id === prepared.id) ? current.plants.map((item) => item.id === prepared.id ? prepared : item) : [prepared, ...current.plants] }));
     setEditing(null); flash('Impianto salvato.');
   };
   const importExcel = async (event) => {
+    if (!isAdmin) { flash('Accesso amministratore richiesto.'); event.target.value = ''; return; }
     const file = event.target.files?.[0]; if (!file) return;
     try {
       const plants = await readPlantsFromExcel(file);
@@ -85,10 +89,12 @@ export default function App() {
     } catch { alert('Questo file non ? un backup valido di Utility Impianti.'); } finally { event.target.value = ''; }
   };
   const startSeason = (name, categories) => {
+    if (!isAdmin) return flash('Accesso amministratore richiesto.');
     const id = crypto.randomUUID();
+    const closedAt = new Date().toISOString();
     const campaign = { id, name: name.trim(), startedAt: new Date().toISOString(), categories };
     setState((current) => ({
-      ...current, campaigns: [campaign, ...current.campaigns],
+      ...current, campaigns: [campaign, ...current.campaigns.map((item) => item.id === current.activeConsumptionCampaignId ? { ...item, closedAt } : item)],
       activeCampaignByType: { ...current.activeCampaignByType, ...Object.fromEntries(categories.map((category) => [category, id])) },
       activeConsumptionCampaignId: id
     }));
@@ -118,12 +124,12 @@ export default function App() {
     {type !== 'all' && <section className="progress"><div><strong>{typeLabel(type)}</strong><span>{completed} di {progressPool.length} completati</span></div><div className="bar"><i style={{ width: `${progressPool.length ? completed / progressPool.length * 100 : 0}%` }} /></div></section>}
     <section className="list-head">
       <span>{visible.length} impianti</span>
-      <div className="list-tools"><button title="Vista schede" className={state.preferences.view === 'cards' ? 'active' : ''} onClick={() => setView('cards')}><Grid2X2 size={17}/></button><button title="Vista elenco" className={state.preferences.view === 'list' ? 'active' : ''} onClick={() => setView('list')}><List size={18}/></button><button title="Vista mappa" onClick={() => setPanel('map')}><Map size={18}/></button><button className="add" onClick={() => setEditing(blankPlant)}><Plus size={18}/> Nuovo</button></div>
+      <div className="list-tools"><button title="Vista schede" className={state.preferences.view === 'cards' ? 'active' : ''} onClick={() => setView('cards')}><Grid2X2 size={17}/></button><button title="Vista elenco" className={state.preferences.view === 'list' ? 'active' : ''} onClick={() => setView('list')}><List size={18}/></button><button title="Vista mappa" onClick={() => setPanel('map')}><Map size={18}/></button>{isAdmin && <button className="add" onClick={() => setEditing(blankPlant)}><Plus size={18}/> Nuovo</button>}</div>
     </section>
     <section className={state.preferences.view === 'list' ? 'plant-list compact' : 'plant-list'}>
       {visible.map((plant) => state.preferences.view === 'list'
-        ? <PlantRow key={plant.id} plant={plant} operating={operatingStatus(state.interventions.filter((item) => item.plantId === plant.id))} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>
-        : <PlantCard key={plant.id} plant={plant} operating={operatingStatus(state.interventions.filter((item) => item.plantId === plant.id))} interventions={state.interventions.filter((item) => item.plantId === plant.id && item.campaignId === state.activeCampaignByType[item.type])} onRecord={record} onEdit={() => setEditing(plant)} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>)}
+        ? <PlantRow key={plant.id} plant={plant} operating={operatingStatus(state.interventions.filter((item) => item.plantId === plant.id))} onEdit={isAdmin ? () => setEditing(plant) : null} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>
+        : <PlantCard key={plant.id} plant={plant} operating={operatingStatus(state.interventions.filter((item) => item.plantId === plant.id))} interventions={state.interventions.filter((item) => item.plantId === plant.id && item.campaignId === state.activeCampaignByType[item.type])} onRecord={record} onEdit={isAdmin ? () => setEditing(plant) : null} onHistory={() => setHistoryPlant(plant)} onConsumption={() => setConsumptionPlant(plant)}/>)}
       {!visible.length && <div className="empty"><FileSpreadsheet size={35}/><h2>Nessun impianto trovato</h2><p>Importa il tuo Excel o modifica i filtri.</p></div>}
     </section>
     <input ref={excelInput} type="file" accept=".xlsx,.xls,.csv" hidden onChange={importExcel}/>
@@ -132,9 +138,10 @@ export default function App() {
     {editing && <PlantEditor plant={editing} technicians={technicians} onClose={() => setEditing(null)} onSave={savePlant}/>}
     {historyPlant && <HistoryModal plant={historyPlant} interventions={state.interventions.filter((item) => item.plantId === historyPlant.id)} campaigns={state.campaigns} onClose={() => setHistoryPlant(null)} onDelete={(id) => setState((current) => ({ ...current, interventions: current.interventions.filter((item) => item.id !== id) }))}/>}
     {consumptionPlant && <ConsumptionModal plant={consumptionPlant} campaign={state.campaigns.find((item) => item.id === state.activeConsumptionCampaignId)} current={state.consumptions.find((item) => item.plantId === consumptionPlant.id && item.campaignId === state.activeConsumptionCampaignId)} history={state.consumptions.filter((item) => item.plantId === consumptionPlant.id)} campaigns={state.campaigns} onClose={() => setConsumptionPlant(null)} onSave={saveConsumption}/>}
-    {panel === 'settings' && <SettingsModal state={state} technicians={technicians} onClose={() => setPanel(null)} onTechnician={(value) => setState((current) => ({ ...current, selectedTechnician: value }))} onExcel={() => excelInput.current.click()} onExport={() => downloadBackup(state)} onConsumptionExport={() => downloadConsumptions(state)} onRestore={() => backupInput.current.click()} onSeason={() => setPanel('season')} onMap={() => setPanel('map')}/>}
+    {panel === 'settings' && <SettingsModal state={state} technicians={technicians} isAdmin={isAdmin} onClose={() => setPanel(null)} onTechnician={(value) => setState((current) => ({ ...current, selectedTechnician: value }))} onLogin={() => setPanel('admin-login')} onLogout={() => { logoutAdmin(); setIsAdmin(false); flash('Amministratore disconnesso.'); }} onExcel={() => excelInput.current.click()} onExport={() => downloadBackup(state)} onConsumptionExport={() => downloadConsumptions(state)} onRestore={() => backupInput.current.click()} onSeason={() => setPanel('season')} onMap={() => setPanel('map')}/>}
     {panel === 'season' && <SeasonModal onClose={() => setPanel('settings')} onStart={startSeason}/>}
     {panel === 'map' && <MapModal plants={visible} technician={state.selectedTechnician} type={type} status={status} onClose={() => setPanel(null)}/>}
+    {panel === 'admin-login' && <AdminLoginModal onClose={() => setPanel('settings')} onLogin={async (username, password) => { if (await loginAdmin(username, password)) { setIsAdmin(true); setPanel('settings'); flash('Accesso amministratore eseguito.'); return true; } return false; }}/>}
   </main>;
 }
 
@@ -143,30 +150,39 @@ function PlantCard({ plant, operating, interventions, onRecord, onEdit, onHistor
   return <article className="plant-card"><PlantHeading plant={plant} operating={operating} onEdit={onEdit} onHistory={onHistory}/><div className="interventions">{TYPES.map(([id, label]) => <button key={id} className={done(id) ? 'intervention done' : 'intervention'} onClick={() => onRecord(plant, id)} title={done(id) ? `Ultima registrazione: ${fmt(done(id).date)}` : `Registra ${label}`}><span>{done(id) ? '?' : '+'}</span>{label}</button>)}</div><button className="consumption-button" onClick={onConsumption}><Gauge size={17}/> Consumi</button></article>;
 }
 function PlantRow({ plant, operating, onEdit, onHistory, onConsumption }) {
-  return <article className="plant-row"><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><div className="row-title"><h2>{plant.description}</h2><OperatingBadge status={operating}/></div><p><MapPin size={14}/>{addressOf(plant) || 'Indirizzo non indicato'}</p><small>{plant.tecnicoResponsabile}</small></a><div className="card-actions"><button onClick={onConsumption} aria-label="Consumi"><Gauge size={16}/></button><button onClick={onEdit} aria-label="Modifica"><Pencil size={16}/></button><button onClick={onHistory} aria-label="Storico"><History size={17}/></button></div></article>;
+  return <article className="plant-row"><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><div className="row-title"><h2>{plant.description}</h2><OperatingBadge status={operating}/></div><p><MapPin size={14}/>{addressOf(plant) || 'Indirizzo non indicato'}</p><small>{plant.tecnicoResponsabile}</small></a><div className="card-actions"><button onClick={onConsumption} aria-label="Consumi"><Gauge size={16}/></button>{onEdit && <button onClick={onEdit} aria-label="Modifica"><Pencil size={16}/></button>}<button onClick={onHistory} aria-label="Storico"><History size={17}/></button></div></article>;
 }
 function PlantHeading({ plant, operating, onEdit, onHistory }) {
-  return <div className="plant-title"><div><div className="row-title"><h2>{plant.description}</h2><OperatingBadge status={operating}/></div><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin size={15}/>{addressOf(plant) || 'Indirizzo non indicato'}</a><small>{plant.tecnicoResponsabile}</small></div><div className="card-actions"><button aria-label="Modifica impianto" onClick={onEdit}><Pencil size={17}/></button><button aria-label="Vedi storico" onClick={onHistory}><History size={18}/></button></div></div>;
+  return <div className="plant-title"><div><div className="row-title"><h2>{plant.description}</h2><OperatingBadge status={operating}/></div><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin size={15}/>{addressOf(plant) || 'Indirizzo non indicato'}</a><small>{plant.tecnicoResponsabile}</small></div><div className="card-actions">{onEdit && <button aria-label="Modifica impianto" onClick={onEdit}><Pencil size={17}/></button>}<button aria-label="Vedi storico" onClick={onHistory}><History size={18}/></button></div></div>;
 }
 function OperatingBadge({ status }) { const label = status === 'on' ? 'Acceso' : status === 'off' ? 'Spento' : 'Stato non registrato'; return <span className={`operating-badge ${status}`} title={label}><i/>{label}</span>; }
-function SettingsModal({ state, technicians, onClose, onTechnician, onExcel, onExport, onConsumptionExport, onRestore, onSeason, onMap }) {
+function SettingsModal({ state, technicians, isAdmin, onClose, onTechnician, onLogin, onLogout, onExcel, onExport, onConsumptionExport, onRestore, onSeason, onMap }) {
   return <Modal title="Impostazioni" onClose={onClose}><div className="settings-list">
+    {isAdmin
+      ? <div className="admin-session"><UserRound/><span><strong>Amministratore</strong><small>Accesso attivo come Luchino</small></span><button onClick={onLogout}>Esci</button></div>
+      : <SettingButton icon={<UserRound/>} title="Accesso amministratore" note="Gestione impianti, stagioni e report" onClick={onLogin}/>}
     <label className="settings-select"><UserRound/><span><strong>Tecnico</strong><small>Impianti visualizzati</small></span><select value={state.selectedTechnician} onChange={(e) => onTechnician(e.target.value)}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select></label>
-    <SettingButton icon={<Upload/>} title="Importa Excel" note="Aggiorna l?elenco impianti" onClick={onExcel}/>
+    {isAdmin && <SettingButton icon={<Upload/>} title="Importa Excel" note="Aggiorna l?elenco impianti" onClick={onExcel}/>}
     <SettingButton icon={<Download/>} title="Esporta backup" note="Salva impianti, storico e stagioni" onClick={onExport}/>
-    <SettingButton icon={<FileSpreadsheet/>} title="Scarica consumi" note="Genera un file Excel della stagione corrente" onClick={onConsumptionExport}/>
-    <SettingButton icon={<ArchiveRestore/>} title="Ripristina backup" note="Compatibile anche con i backup V1" onClick={onRestore}/>
-    <SettingButton icon={<RotateCcw/>} title="Nuova stagione" note="Azzera i contatori scelti, conserva lo storico" onClick={onSeason}/>
+    {isAdmin && <SettingButton icon={<FileSpreadsheet/>} title="Scarica consumi" note="Genera un file Excel della stagione corrente" onClick={onConsumptionExport}/>}
+    {isAdmin && <SettingButton icon={<ArchiveRestore/>} title="Ripristina backup" note="Compatibile anche con i backup V1" onClick={onRestore}/>}
+    {isAdmin && <SettingButton icon={<RotateCcw/>} title="Chiudi e apri stagione" note="Chiude il periodo corrente e avvia il successivo" onClick={onSeason}/>}
     <SettingButton icon={<Map/>} title="Mappa impianti" note="Usa i filtri attualmente selezionati" onClick={onMap}/>
     <div className="app-info"><Info/><div><strong>Utility Impianti</strong><small>Versione 1.1 ? dati salvati sul dispositivo</small></div></div>
   </div></Modal>;
 }
 function SettingButton({ icon, title, note, onClick }) { return <button className="setting-button" onClick={onClick}>{icon}<span><strong>{title}</strong><small>{note}</small></span><span>?</span></button>; }
+function AdminLoginModal({ onClose, onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  return <Modal title="Accesso amministratore" onClose={onClose}><form className="form" onSubmit={async (event) => { event.preventDefault(); setError(''); if (!await onLogin(username, password)) setError('Username o password non corretti.'); }}><label>Username<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required/></label><label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/></label>{error && <p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annulla</button><button type="submit">Accedi</button></div></form></Modal>;
+}
 function SeasonModal({ onClose, onStart }) {
   const [name, setName] = useState(`Stagione ${new Date().getFullYear() + 1}`);
   const [selected, setSelected] = useState([...ALL_TYPES]);
   const toggle = (id) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
-  return <Modal title="Nuova stagione" onClose={onClose}><p className="modal-subtitle">Gli interventi gi? registrati resteranno nello storico. Solo i contatori delle categorie scelte ripartiranno da zero.</p><div className="form"><label>Nome stagione<input value={name} onChange={(e) => setName(e.target.value)}/></label><fieldset><legend>Categorie da riavviare</legend>{TYPES.map(([id, label]) => <label className="check" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)}/>{label}</label>)}</fieldset><div className="modal-actions"><button className="secondary" onClick={onClose}>Annulla</button><button disabled={!name.trim() || !selected.length} onClick={() => { if (window.confirm(`Avviare ?${name}? per ${selected.length} categorie?`)) onStart(name, selected); }}>Avvia stagione</button></div></div></Modal>;
+  return <Modal title="Chiudi e apri stagione" onClose={onClose}><p className="modal-subtitle">Il periodo consumi corrente verr? chiuso. Gli interventi e le letture resteranno nello storico; le categorie scelte ripartiranno da zero.</p><div className="form"><label>Nome nuova stagione<input value={name} onChange={(e) => setName(e.target.value)}/></label><fieldset><legend>Categorie da riavviare</legend>{TYPES.map(([id, label]) => <label className="check" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)}/>{label}</label>)}</fieldset><div className="modal-actions"><button className="secondary" onClick={onClose}>Annulla</button><button disabled={!name.trim() || !selected.length} onClick={() => { if (window.confirm(`Chiudere la stagione corrente e avviare ?${name}??`)) onStart(name, selected); }}>Chiudi e avvia</button></div></div></Modal>;
 }
 function MapModal({ plants, technician, type, status, onClose }) {
   const [showMap, setShowMap] = useState(false);

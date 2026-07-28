@@ -18,6 +18,8 @@ App web mobile-first per gestire impianti e interventi, con dati salvati localme
 - Azione ?Vedi tutti? in mappa, coerente con tecnico, intervento e stato selezionati.
 - Filtri adattivi su pi? righe, senza categorie tagliate.
 - Mappa interna con marcatori per tutti gli impianti filtrati e geocodifica progressiva memorizzata localmente.
+- Accesso amministratore locale: solo l?amministratore gestisce anagrafica, stagioni e report consumi.
+- Selettore tecnico ridimensionato per evitare sovrapposizioni con la ricerca.
 
 ## Dati
 

@@ -66,6 +66,64 @@
   overflow-x: visible;
 }
 
+.controls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.select-wrap {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.select-wrap select,
+.search,
+.search input {
+  min-width: 0;
+}
+
+.select-wrap select {
+  width: 100%;
+}
+
+.admin-session {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 12px;
+  background: #ddf5e9;
+  color: #155f43;
+}
+
+.admin-session > svg {
+  flex: 0 0 auto;
+}
+
+.admin-session span {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.admin-session small {
+  color: #4c7565;
+}
+
+.admin-session button {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fff;
+  color: #855;
+  font-weight: 750;
+}
+
+.form-error {
+  margin: 0;
+  color: #a03939;
+  font-size: .86rem;
+  font-weight: 750;
+}
+
 .map-overview {
   margin-bottom: 13px;
   padding: 8px;
@@ -239,5 +297,11 @@
 
   .meter-result {
     justify-content: space-between;
+  }
+}
+
+@media (min-width: 620px) {
+  .controls {
+    grid-template-columns: minmax(285px, .9fr) minmax(0, 1.6fr);
   }
 }
