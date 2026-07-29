@@ -1,5 +1,6 @@
 const KEY = 'utility-impianti-v1';
 export const ALL_TYPES = ['manutenzione', 'verifica', 'prova-fumi', 'preaccensione', 'accensione', 'spegnimento'];
+export const campaignId = (id) => id || 'legacy';
 const initialCampaign = () => ({
   id: 'legacy',
   name: 'Dati precedenti',
@@ -16,22 +17,25 @@ export const emptyState = {
 export function migrateState(saved) {
   if (!saved || !Array.isArray(saved.plants) || !Array.isArray(saved.interventions)) return emptyState;
   const campaigns = Array.isArray(saved.campaigns) && saved.campaigns.length ? saved.campaigns : [initialCampaign()];
-  const activeCampaignByType = { ...emptyState.activeCampaignByType, ...(saved.activeCampaignByType || {}) };
+  const activeCampaignByType = Object.fromEntries(Object.entries({
+    ...emptyState.activeCampaignByType, ...(saved.activeCampaignByType || {})
+  }).map(([type, id]) => [type, campaignId(id)]));
   const interventions = saved.interventions.map((item) => ({
     ...item,
-    campaignId: item.campaignId || activeCampaignByType[item.type] || 'legacy'
+    campaignId: campaignId(item.campaignId || activeCampaignByType[item.type])
   }));
   return {
     ...emptyState, ...saved, version: 3, campaigns, activeCampaignByType, interventions,
     consumptions: Array.isArray(saved.consumptions) ? saved.consumptions.map((item) => ({
       ...item,
+      campaignId: campaignId(item.campaignId),
       energyMeters: Array.isArray(item.energyMeters) ? item.energyMeters : (
         item.energyStart !== undefined || item.energyEnd !== undefined
           ? [{ id: `${item.id || 'legacy'}-energy-1`, zone: 'Contatore 1', start: item.energyStart ?? '', end: item.energyEnd ?? '' }]
           : []
       )
     })) : [],
-    activeConsumptionCampaignId: saved.activeConsumptionCampaignId || 'legacy',
+    activeConsumptionCampaignId: campaignId(saved.activeConsumptionCampaignId),
     preferences: { ...emptyState.preferences, ...(saved.preferences || {}) }
   };
 }
