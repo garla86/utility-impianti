@@ -29,8 +29,6 @@ const operatingStatus = (interventions) => {
   const latest = interventions.filter((item) => item.type === 'accensione' || item.type === 'spegnimento').sort((a, b) => new Date(b.date) - new Date(a.date))[0];
   return latest?.type === 'accensione' ? 'on' : latest?.type === 'spegnimento' ? 'off' : 'unknown';
 };
-const ADMIN_EMAIL = 'graziano.garlaschelli@cfsfacility.it';
-
 function LoadingScreen({ text }) { return <main className="auth-shell"><div className="auth-card"><Wrench size={34}/><h1>Utility Impianti</h1><p>{text}</p></div></main>; }
 function InvitationSetup({ session, onComplete }) {
   const fullName = session.user.user_metadata?.full_name || '';
@@ -60,24 +58,16 @@ function InvitationSetup({ session, onComplete }) {
 function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [mode, setMode] = useState('login');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async (event) => {
     event.preventDefault(); setBusy(true); setMessage('');
     try {
-      if (mode === 'setup') {
-        if (email.trim().toLowerCase() !== ADMIN_EMAIL) throw new Error('Il primo account deve usare l’email amministratore configurata.');
-        const { error } = await supabase.auth.signUp({ email: email.trim(), password, options: { data: { full_name: 'Graziano Garlaschelli' } } });
-        if (error) throw error;
-        setMessage('Account creato. Controlla l’email per confermare l’accesso, poi torna qui.');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
-      }
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) throw error;
     } catch (error) { setMessage(error.message); } finally { setBusy(false); }
   };
-  return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Gestione condivisa</p><h1>Utility Impianti</h1><p>{mode === 'login' ? 'Accedi con la tua email aziendale.' : 'Crea il primo account amministratore.'}</p><form className="form" onSubmit={submit}><label>Email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required/></label><label>Password<input type="password" minLength="8" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} required/></label>{message && <p className="form-error">{message}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Attendere…' : mode === 'login' ? 'Accedi' : 'Crea amministratore'}</button></form><button className="auth-switch" onClick={() => { setMode(mode === 'login' ? 'setup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'Prima configurazione amministratore' : 'Torna all’accesso'}</button></section></main>;
+  return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Gestione condivisa</p><h1>Utility Impianti</h1><p>Accedi con la tua email aziendale.</p><form className="form" onSubmit={submit}><label>Email<input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required/></label><label>Password<input type="password" minLength="8" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/></label>{message && <p className="form-error">{message}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Attendere…' : 'Accedi'}</button></form></section></main>;
 }
 
 export default function App() {
@@ -86,11 +76,17 @@ export default function App() {
   const [profiles, setProfiles] = useState([]);
   const [ready, setReady] = useState(false);
   const [invitationSetup, setInvitationSetup] = useState(isInvitationCallback);
+  const [invitationError, setInvitationError] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setReady(true); });
     return () => data.subscription.unsubscribe();
   }, []);
+  useEffect(() => {
+    if (!invitationSetup || session || !ready) return undefined;
+    const timer = window.setTimeout(() => setInvitationError(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [invitationSetup, session, ready]);
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     Promise.all([loadProfile(session.user.id), loadProfiles()])
@@ -98,6 +94,8 @@ export default function App() {
       .catch(() => setProfile(null));
   }, [session]);
   if (!ready) return <LoadingScreen text="Avvio Utility Impianti…"/>;
+  if (!session && invitationSetup && !invitationError) return <LoadingScreen text="Verifica dell’invito in corso…"/>;
+  if (!session && invitationSetup) return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Invito non completato</p><h1>Utility Impianti</h1><p>Non è stato possibile verificare questo invito. Apri nuovamente il collegamento originale ricevuto via email oppure chiedi all’amministratore un nuovo invito.</p><button className="auth-submit" onClick={() => { clearInvitationCallback(); setInvitationSetup(false); setInvitationError(false); }}>Vai all’accesso</button></section></main>;
   if (!session) return <AuthScreen/>;
   if (invitationSetup) return <InvitationSetup session={session} onComplete={() => setInvitationSetup(false)}/>;
   if (!profile) return <LoadingScreen text="Caricamento profilo…"/>;
