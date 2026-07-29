@@ -170,6 +170,25 @@
   font-weight: 750;
 }
 
+.activation-identity {
+  display: flex;
+  flex-direction: column;
+  gap: .25rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  border: 1px solid #cfe0dc;
+  border-radius: 16px;
+  background: #eef7f5;
+}
+
+.activation-identity strong {
+  font-size: 1.05rem;
+}
+
+.activation-identity small {
+  color: #58736e;
+}
+
 .intervention:disabled {
   cursor: not-allowed;
   opacity: .48;

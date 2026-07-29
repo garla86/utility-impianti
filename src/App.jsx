@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { readPlantsFromExcel } from './excel';
 import { importPlanMessage, planPlantImport } from './importSync';
+import { clearInvitationCallback, isInvitationCallback } from './authFlow';
 import { ALL_TYPES, downloadBackup, loadState, migrateState, saveState } from './storage';
 import { downloadConsumptions } from './consumptionExport';
 import { supabase } from './supabase';
@@ -31,6 +32,31 @@ const operatingStatus = (interventions) => {
 const ADMIN_EMAIL = 'graziano.garlaschelli@cfsfacility.it';
 
 function LoadingScreen({ text }) { return <main className="auth-shell"><div className="auth-card"><Wrench size={34}/><h1>Utility Impianti</h1><p>{text}</p></div></main>; }
+function InvitationSetup({ session, onComplete }) {
+  const fullName = session.user.user_metadata?.full_name || '';
+  const technicianName = session.user.user_metadata?.technician_name || '';
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (event) => {
+    event.preventDefault();
+    setMessage('');
+    if (password !== confirmPassword) return setMessage('Le password non coincidono.');
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      clearInvitationCallback();
+      onComplete();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Prima attivazione</p><h1>Benvenuto</h1><p>Conferma i tuoi dati e scegli la password personale.</p><div className="activation-identity"><strong>{fullName || session.user.email}</strong>{technicianName && <small>Tecnico associato: {technicianName}</small>}<small>{session.user.email}</small></div><form className="form" onSubmit={submit}><label>Nuova password<input type="password" minLength="8" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required/></label><label>Conferma password<input type="password" minLength="8" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required/></label>{message && <p className="form-error">{message}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Attendere…' : 'Attiva il mio account'}</button></form></section></main>;
+}
 function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -59,6 +85,7 @@ export default function App() {
   const [profile, setProfile] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [ready, setReady] = useState(false);
+  const [invitationSetup, setInvitationSetup] = useState(isInvitationCallback);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setReady(true); });
@@ -72,6 +99,7 @@ export default function App() {
   }, [session]);
   if (!ready) return <LoadingScreen text="Avvio Utility Impianti…"/>;
   if (!session) return <AuthScreen/>;
+  if (invitationSetup) return <InvitationSetup session={session} onComplete={() => setInvitationSetup(false)}/>;
   if (!profile) return <LoadingScreen text="Caricamento profilo…"/>;
   return <WorkspaceApp session={session} profile={profile} profiles={profiles} refreshProfiles={async () => setProfiles(await loadProfiles())}/>;
 }
