@@ -114,8 +114,10 @@ export async function cloudDeleteSeason(id) {
 
 export async function cloudSaveConsumption(plantId, seasonId, values, userId, existingCloudId) {
   const row = { plant_id: plantId, season_id: cloudSeasonId(seasonId), gas_start: value(values.gasStart), gas_end: value(values.gasEnd), updated_by: userId, updated_at: new Date().toISOString() };
-  if (existingCloudId) row.id = existingCloudId;
-  const { data, error } = await supabase.from('consumptions').upsert(row, { onConflict: 'plant_id,season_id' }).select().single();
+  const query = existingCloudId
+    ? supabase.from('consumptions').update(row).eq('id', existingCloudId)
+    : supabase.from('consumptions').insert(row);
+  const { data, error } = await query.select().single();
   if (error) throw error;
   const removed = await supabase.from('energy_meters').delete().eq('consumption_id', data.id);
   if (removed.error) throw removed.error;
