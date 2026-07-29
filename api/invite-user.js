@@ -16,7 +16,7 @@ export default async function handler(request, response) {
   if (!email || !fullName || !technicianName) return response.status(400).json({ error: 'Compila email, nome e tecnico associato' });
   const { data, error } = await admin.auth.admin.inviteUserByEmail(email.trim().toLowerCase(), {
     data: { full_name: fullName.trim(), technician_name: technicianName.trim() },
-    redirectTo: `${request.headers.origin || 'https://utility-impianti.vercel.app'}`
+    redirectTo: `${request.headers.origin || 'https://utility-impianti.vercel.app'}/?invited=1`
   });
   if (error) return response.status(400).json({ error: error.message });
   return response.status(200).json({ id: data.user.id, email: data.user.email });
