@@ -12,7 +12,7 @@ import { downloadConsumptions } from './consumptionExport';
 import { supabase } from './supabase';
 import {
   cloudDeleteIntervention, cloudImportPlants, cloudRecordIntervention, cloudSaveConsumption,
-  cloudSavePlant, cloudStartSeason, loadCloudState, loadProfile, loadProfiles,
+  cloudDeletePlant, cloudDeleteSeason, cloudSavePlant, cloudStartSeason, loadCloudState, loadProfile, loadProfiles,
   inviteTechnician, migrateLocalToCloud, subscribeToCloud
 } from './cloud';
 
@@ -158,6 +158,21 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
       setEditing(null); flash('Impianto salvato.');
     } catch (error) { alert(error.message); }
   };
+  const deletePlant = async (plant) => {
+    if (!isAdmin) return flash('Accesso amministratore richiesto.');
+    if (!window.confirm(`Eliminare definitivamente “${plant.description}” e tutto il suo storico?`)) return;
+    if (!window.confirm('Questa operazione non può essere annullata. Confermi l’eliminazione completa?')) return;
+    try {
+      await cloudDeletePlant(plant.id);
+      setState((current) => ({
+        ...current,
+        plants: current.plants.filter((item) => item.id !== plant.id),
+        interventions: current.interventions.filter((item) => item.plantId !== plant.id),
+        consumptions: current.consumptions.filter((item) => item.plantId !== plant.id)
+      }));
+      setEditing(null); flash('Impianto e storico eliminati.');
+    } catch (error) { alert(error.message); }
+  };
   const importExcel = async (event) => {
     if (!isAdmin) { flash('Accesso amministratore richiesto.'); event.target.value = ''; return; }
     const file = event.target.files?.[0]; if (!file) return;
@@ -232,11 +247,12 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
     <input ref={excelInput} type="file" accept=".xlsx,.xls,.csv" hidden onChange={importExcel}/>
     <input ref={backupInput} type="file" accept="application/json,.json" hidden onChange={importBackup}/>
     {notice && <div className="toast">{notice}</div>}
-    {editing && <PlantEditor plant={editing} technicians={technicians} onClose={() => setEditing(null)} onSave={savePlant}/>}
+    {editing && <PlantEditor plant={editing} technicians={technicians} onClose={() => setEditing(null)} onSave={savePlant} onDelete={editing.id ? deletePlant : null}/>}
     {historyPlant && <HistoryModal plant={historyPlant} interventions={state.interventions.filter((item) => item.plantId === historyPlant.id)} campaigns={state.campaigns} canDelete={(item) => isAdmin || item.performedBy === session.user.id} onClose={() => setHistoryPlant(null)} onDelete={async (id) => { try { await cloudDeleteIntervention(id); setState((current) => ({ ...current, interventions: current.interventions.filter((item) => item.id !== id) })); } catch (error) { alert(error.message); } }}/>}
     {consumptionPlant && <ConsumptionModal plant={consumptionPlant} readOnly={!canOperate(consumptionPlant)} campaign={state.campaigns.find((item) => item.id === state.activeConsumptionCampaignId)} current={state.consumptions.find((item) => item.plantId === consumptionPlant.id && item.campaignId === state.activeConsumptionCampaignId)} history={state.consumptions.filter((item) => item.plantId === consumptionPlant.id)} campaigns={state.campaigns} onClose={() => setConsumptionPlant(null)} onSave={saveConsumption}/>}
-    {panel === 'settings' && <SettingsModal state={state} technicians={technicians} isAdmin={isAdmin} profile={profile} onClose={() => setPanel(null)} onTechnician={(value) => setState((current) => ({ ...current, selectedTechnician: value }))} onLogout={() => supabase.auth.signOut()} onUsers={() => setPanel('users')} onExcel={() => excelInput.current.click()} onExport={() => downloadBackup(state)} onConsumptionExport={() => downloadConsumptions(state)} onRestore={() => backupInput.current.click()} onSeason={() => setPanel('season')} onMap={() => setPanel('map')} onMigrate={async () => { if (!window.confirm('Importare nel cloud tutti i dati locali presenti su questo dispositivo?')) return; try { await migrateLocalToCloud(loadState(), session.user.id, profiles); await refreshCloud(); flash('Dati locali migrati nel cloud.'); } catch (error) { alert(error.message); } }}/>}
+    {panel === 'settings' && <SettingsModal state={state} technicians={technicians} isAdmin={isAdmin} profile={profile} onClose={() => setPanel(null)} onTechnician={(value) => setState((current) => ({ ...current, selectedTechnician: value }))} onLogout={() => supabase.auth.signOut()} onUsers={() => setPanel('users')} onExcel={() => excelInput.current.click()} onExport={() => downloadBackup(state)} onConsumptionExport={() => downloadConsumptions(state)} onRestore={() => backupInput.current.click()} onSeason={() => setPanel('season')} onSeasons={() => setPanel('seasons')} onMap={() => setPanel('map')} onMigrate={async () => { if (!window.confirm('Importare nel cloud tutti i dati locali presenti su questo dispositivo?')) return; try { await migrateLocalToCloud(loadState(), session.user.id, profiles); await refreshCloud(); flash('Dati locali migrati nel cloud.'); } catch (error) { alert(error.message); } }}/>}
     {panel === 'season' && <SeasonModal onClose={() => setPanel('settings')} onStart={startSeason}/>}
+    {panel === 'seasons' && <SeasonsModal campaigns={state.campaigns} activeIds={new Set([...Object.values(state.activeCampaignByType), state.activeConsumptionCampaignId])} onClose={() => setPanel('settings')} onDelete={async (campaign) => { if (!window.confirm(`Eliminare definitivamente la stagione “${campaign.name}” e tutti i dati collegati?`)) return; try { await cloudDeleteSeason(campaign.id); await refreshCloud(); flash('Stagione precedente eliminata.'); } catch (error) { alert(error.message); } }}/>}
     {panel === 'map' && <MapModal plants={visible} technician={state.selectedTechnician} type={type} status={status} onClose={() => setPanel(null)}/>}
     {panel === 'users' && <UsersModal profiles={profiles} onClose={() => setPanel('settings')} onInvite={async (details) => { await inviteTechnician(details); await refreshProfiles(); flash('Invito inviato al tecnico.'); }}/>}
     {!cloudReady && <div className="sync-banner">Sincronizzazione dati…</div>}
@@ -254,7 +270,7 @@ function PlantHeading({ plant, operating, onEdit, onHistory }) {
   return <div className="plant-title"><div><div className="row-title"><h2>{plant.description}</h2><OperatingBadge status={operating}/></div><a href={mapsUrl(plant)} target="_blank" rel="noreferrer"><MapPin size={15}/>{addressOf(plant) || 'Indirizzo non indicato'}</a><small>{plant.tecnicoResponsabile}</small></div><div className="card-actions">{onEdit && <button aria-label="Modifica impianto" onClick={onEdit}><Pencil size={17}/></button>}<button aria-label="Vedi storico" onClick={onHistory}><History size={18}/></button></div></div>;
 }
 function OperatingBadge({ status }) { const label = status === 'on' ? 'Acceso' : status === 'off' ? 'Spento' : 'Stato non registrato'; return <span className={`operating-badge ${status}`} title={label}><i/>{label}</span>; }
-function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechnician, onLogout, onUsers, onExcel, onExport, onConsumptionExport, onRestore, onSeason, onMap, onMigrate }) {
+function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechnician, onLogout, onUsers, onExcel, onExport, onConsumptionExport, onRestore, onSeason, onSeasons, onMap, onMigrate }) {
   return <Modal title="Impostazioni" onClose={onClose}><div className="settings-list">
     <div className="admin-session"><UserRound/><span><strong>{isAdmin ? 'Amministratore' : profile.full_name || profile.technician_name || 'Tecnico'}</strong><small>{profile.email}</small></span><button onClick={onLogout}>Esci</button></div>
     <label className="settings-select"><UserRound/><span><strong>Tecnico</strong><small>Impianti visualizzati</small></span><select value={state.selectedTechnician} onChange={(e) => onTechnician(e.target.value)}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select></label>
@@ -264,6 +280,7 @@ function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechni
     {isAdmin && <SettingButton icon={<FileSpreadsheet/>} title="Scarica consumi" note="Genera un file Excel della stagione corrente" onClick={onConsumptionExport}/>}
     {isAdmin && <SettingButton icon={<ArchiveRestore/>} title="Ripristina backup" note="Compatibile anche con i backup V1" onClick={onRestore}/>}
     {isAdmin && <SettingButton icon={<RotateCcw/>} title="Chiudi e apri stagione" note="Chiude il periodo corrente e avvia il successivo" onClick={onSeason}/>}
+    {isAdmin && <SettingButton icon={<History/>} title="Gestione stagioni" note="Consulta o elimina le stagioni precedenti" onClick={onSeasons}/>}
     {isAdmin && <SettingButton icon={<Upload/>} title="Migra dati V1" note="Copia nel cloud i dati locali di questo dispositivo" onClick={onMigrate}/>}
     <SettingButton icon={<Map/>} title="Mappa impianti" note="Usa i filtri attualmente selezionati" onClick={onMap}/>
     <div className="app-info"><Info/><div><strong>Utility Impianti</strong><small>Versione 1.1 · dati salvati sul dispositivo</small></div></div>
@@ -282,6 +299,10 @@ function SeasonModal({ onClose, onStart }) {
   const [selected, setSelected] = useState([...ALL_TYPES]);
   const toggle = (id) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   return <Modal title="Chiudi e apri stagione" onClose={onClose}><p className="modal-subtitle">Il periodo consumi corrente verrà chiuso. Gli interventi e le letture resteranno nello storico; le categorie scelte ripartiranno da zero.</p><div className="form"><label>Nome nuova stagione<input value={name} onChange={(e) => setName(e.target.value)}/></label><fieldset><legend>Categorie da riavviare</legend>{TYPES.map(([id, label]) => <label className="check" key={id}><input type="checkbox" checked={selected.includes(id)} onChange={() => toggle(id)}/>{label}</label>)}</fieldset><div className="modal-actions"><button className="secondary" onClick={onClose}>Annulla</button><button disabled={!name.trim() || !selected.length} onClick={() => { if (window.confirm(`Chiudere la stagione corrente e avviare “${name}”?`)) onStart(name, selected); }}>Chiudi e avvia</button></div></div></Modal>;
+}
+function SeasonsModal({ campaigns, activeIds, onClose, onDelete }) {
+  const previous = campaigns.filter((campaign) => campaign.id !== 'legacy' && !activeIds.has(campaign.id));
+  return <Modal title="Gestione stagioni" onClose={onClose}><p className="modal-subtitle">Puoi eliminare soltanto stagioni non più attive. Verranno eliminati anche interventi e consumi collegati.</p><div className="history">{previous.length ? previous.map((campaign) => <div className="history-row" key={campaign.id}><div><strong>{campaign.name}</strong><span>{campaign.closedAt ? `Chiusa il ${fmt(campaign.closedAt)}` : 'Stagione precedente'}</span></div><button onClick={() => onDelete(campaign)} aria-label={`Elimina ${campaign.name}`}>×</button></div>) : <p>Nessuna stagione precedente eliminabile.</p>}</div></Modal>;
 }
 function MapModal({ plants, technician, type, status, onClose }) {
   const [showMap, setShowMap] = useState(false);
@@ -371,9 +392,9 @@ function ConsumptionModal({ plant, readOnly, campaign, current, history, campaig
 const displayReading = (value) => value === '' || value == null ? '—' : new Intl.NumberFormat('it-IT', { maximumFractionDigits: 3 }).format(value);
 const numericDifference = (end, start) => end !== '' && start !== '' && Number(end) >= Number(start) ? Number(end) - Number(start) : null;
 const difference = (end, start) => { const value = numericDifference(end, start); return value == null ? '—' : displayReading(value); };
-function PlantEditor({ plant, technicians, onClose, onSave }) {
+function PlantEditor({ plant, technicians, onClose, onSave, onDelete }) {
   const [draft, setDraft] = useState(plant); const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  return <Modal title={plant.id ? 'Modifica impianto' : 'Nuovo impianto'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave(draft); }} className="form"><Field label="Descrizione *" value={draft.description} onChange={(value) => set('description', value)} required/><Field label="Comune" value={draft.comune} onChange={(value) => set('comune', value)}/><Field label="Via / Indirizzo" value={draft.via} onChange={(value) => set('via', value)}/><Field label="CAP" value={draft.cap} onChange={(value) => set('cap', value)}/><Field label="Amministratore" value={draft.amministratore} onChange={(value) => set('amministratore', value)}/><label>Tecnico responsabile<input list="technicians" value={draft.tecnicoResponsabile} onChange={(e) => set('tecnicoResponsabile', e.target.value)} required/><datalist id="technicians">{technicians.map((tech) => <option key={tech} value={tech}/>)}</datalist></label><label className="check"><input type="checkbox" checked={draft.active} onChange={(e) => set('active', e.target.checked)}/> Impianto attivo</label><div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annulla</button><button type="submit">Salva impianto</button></div></form></Modal>;
+  return <Modal title={plant.id ? 'Modifica impianto' : 'Nuovo impianto'} onClose={onClose}><form onSubmit={(e) => { e.preventDefault(); onSave(draft); }} className="form"><Field label="Descrizione *" value={draft.description} onChange={(value) => set('description', value)} required/><Field label="Comune" value={draft.comune} onChange={(value) => set('comune', value)}/><Field label="Via / Indirizzo" value={draft.via} onChange={(value) => set('via', value)}/><Field label="CAP" value={draft.cap} onChange={(value) => set('cap', value)}/><Field label="Amministratore" value={draft.amministratore} onChange={(value) => set('amministratore', value)}/><label>Tecnico responsabile<input list="technicians" value={draft.tecnicoResponsabile} onChange={(e) => set('tecnicoResponsabile', e.target.value)} required/><datalist id="technicians">{technicians.map((tech) => <option key={tech} value={tech}/>)}</datalist></label><label className="check"><input type="checkbox" checked={draft.active} onChange={(e) => set('active', e.target.checked)}/> Impianto attivo</label>{onDelete && <button type="button" className="danger-button" onClick={() => onDelete(plant)}>Elimina impianto e storico</button>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Annulla</button><button type="submit">Salva impianto</button></div></form></Modal>;
 }
 function Field({ label, value, onChange, required }) { return <label>{label}<input value={value || ''} onChange={(e) => onChange(e.target.value)} required={required}/></label>; }
 function HistoryModal({ plant, interventions, campaigns, canDelete, onClose, onDelete }) {

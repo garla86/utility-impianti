@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { migrateState } from './storage';
 
 const value = (item) => item === '' ? null : item;
+const cloudSeasonId = (id) => !id || id === 'legacy' ? null : id;
 const consumptionId = (plantId, seasonId) => `${plantId}:${seasonId || 'legacy'}`;
 
 export async function loadProfile(userId) {
@@ -58,7 +59,7 @@ export function subscribeToCloud(onChange) {
 
 export async function cloudRecordIntervention(plant, type, seasonId, userId) {
   const { data, error } = await supabase.from('interventions').insert({
-    plant_id: plant.id, type, season_id: seasonId || null, performed_by: userId
+    plant_id: plant.id, type, season_id: cloudSeasonId(seasonId), performed_by: userId
   }).select().single();
   if (error) throw error;
   return { id: data.id, plantId: data.plant_id, type: data.type, date: data.performed_at, campaignId: data.season_id, performedBy: data.performed_by };
@@ -97,8 +98,22 @@ export async function cloudDeleteIntervention(id) {
   if (error) throw error;
 }
 
+export async function cloudDeletePlant(id) {
+  const { error } = await supabase.from('plants').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function cloudDeleteSeason(id) {
+  const interventions = await supabase.from('interventions').delete().eq('season_id', id);
+  if (interventions.error) throw interventions.error;
+  const consumptions = await supabase.from('consumptions').delete().eq('season_id', id);
+  if (consumptions.error) throw consumptions.error;
+  const season = await supabase.from('seasons').delete().eq('id', id);
+  if (season.error) throw season.error;
+}
+
 export async function cloudSaveConsumption(plantId, seasonId, values, userId, existingCloudId) {
-  const row = { plant_id: plantId, season_id: seasonId || null, gas_start: value(values.gasStart), gas_end: value(values.gasEnd), updated_by: userId, updated_at: new Date().toISOString() };
+  const row = { plant_id: plantId, season_id: cloudSeasonId(seasonId), gas_start: value(values.gasStart), gas_end: value(values.gasEnd), updated_by: userId, updated_at: new Date().toISOString() };
   if (existingCloudId) row.id = existingCloudId;
   const { data, error } = await supabase.from('consumptions').upsert(row, { onConflict: 'plant_id,season_id' }).select().single();
   if (error) throw error;
