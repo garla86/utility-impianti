@@ -38,4 +38,20 @@ describe('migrazione dati V1', () => {
       zone: 'Contatore 1', start: 10, end: 15
     })]);
   });
+
+  it('allinea i dati cloud senza stagione alla campagna legacy', () => {
+    const migrated = migrateState({
+      version: 4,
+      plants: [{ id: 'p1', description: 'Impianto' }],
+      interventions: [{ id: 'i1', plantId: 'p1', type: 'accensione', campaignId: null }],
+      consumptions: [{ id: 'c1', plantId: 'p1', campaignId: null, energyMeters: [] }],
+      campaigns: [],
+      activeCampaignByType: { accensione: null },
+      activeConsumptionCampaignId: null
+    });
+    expect(migrated.activeCampaignByType.accensione).toBe('legacy');
+    expect(migrated.interventions[0].campaignId).toBe('legacy');
+    expect(migrated.activeConsumptionCampaignId).toBe('legacy');
+    expect(migrated.consumptions[0].campaignId).toBe('legacy');
+  });
 });
