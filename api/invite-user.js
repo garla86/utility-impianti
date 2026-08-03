@@ -12,11 +12,14 @@ export default async function handler(request, response) {
   if (authError || !authData.user) return response.status(401).json({ error: 'Sessione non valida' });
   const { data: profile } = await admin.from('profiles').select('role,active').eq('id', authData.user.id).single();
   if (profile?.role !== 'admin' || !profile.active) return response.status(403).json({ error: 'Permesso amministratore richiesto' });
-  const { email, fullName, technicianName } = request.body || {};
-  if (!email || !fullName || !technicianName) return response.status(400).json({ error: 'Compila email, nome e tecnico associato' });
-  const { data, error } = await admin.auth.admin.inviteUserByEmail(email.trim().toLowerCase(), {
-    data: { full_name: fullName.trim(), technician_name: technicianName.trim() },
-    redirectTo: `${request.headers.origin || 'https://utility-impianti.vercel.app'}/?invited=1`
+  const { email, fullName, technicianName, temporaryPassword } = request.body || {};
+  if (!email || !fullName || !technicianName || !temporaryPassword) return response.status(400).json({ error: 'Compila email, nome, tecnico associato e password provvisoria' });
+  if (temporaryPassword.length < 8) return response.status(400).json({ error: 'La password provvisoria deve contenere almeno 8 caratteri' });
+  const { data, error } = await admin.auth.admin.createUser({
+    email: email.trim().toLowerCase(),
+    password: temporaryPassword,
+    email_confirm: true,
+    user_metadata: { full_name: fullName.trim(), technician_name: technicianName.trim(), must_change_password: true }
   });
   if (error) return response.status(400).json({ error: error.message });
   return response.status(200).json({ id: data.user.id, email: data.user.email });
