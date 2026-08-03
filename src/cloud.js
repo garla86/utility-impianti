@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { migrateState } from './storage';
+import { sameTechnician } from './technicians';
 
 const value = (item) => item === '' ? null : item;
 const cloudSeasonId = (id) => !id || id === 'legacy' ? null : id;
@@ -66,7 +67,7 @@ export async function cloudRecordIntervention(plant, type, seasonId, userId) {
 }
 
 export async function cloudSavePlant(plant, profiles) {
-  const assigned = profiles.find((item) => item.technician_name === plant.tecnicoResponsabile);
+  const assigned = profiles.find((item) => sameTechnician(item.technician_name, plant.tecnicoResponsabile));
   const row = {
     id: plant.id, description: plant.description, comune: plant.comune || '', via: plant.via || '',
     cap: plant.cap || '', amministratore: plant.amministratore || '', technician_name: plant.tecnicoResponsabile,
