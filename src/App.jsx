@@ -10,6 +10,7 @@ import { clearInvitationCallback, isInvitationCallback, mustChangeTemporaryPassw
 import { ALL_TYPES, downloadBackup, loadState, migrateState, saveState } from './storage';
 import { downloadConsumptions } from './consumptionExport';
 import { supabase } from './supabase';
+import { sameTechnician, uniqueTechnicians } from './technicians';
 import {
   cloudDeleteIntervention, cloudImportPlants, cloudRecordIntervention, cloudSaveConsumption,
   cloudDeletePlant, cloudDeleteSeason, cloudSavePlant, cloudStartSeason, loadCloudState, loadProfile, loadProfiles,
@@ -129,7 +130,13 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
   };
   useEffect(() => { refreshCloud().catch((error) => { console.error(error); setCloudReady(true); }); }, []);
   useEffect(() => subscribeToCloud(() => refreshCloud().catch(console.error)), [state.selectedTechnician]);
-  const technicians = useMemo(() => [...new Set([...profiles.map((item) => item.technician_name), ...state.plants.map((item) => item.tecnicoResponsabile)].filter(Boolean))].sort((a, b) => a.localeCompare(b)), [profiles, state.plants]);
+  const technicians = useMemo(() => uniqueTechnicians(
+    state.plants.map((item) => item.tecnicoResponsabile),
+    profiles.map((item) => item.technician_name)
+  ), [profiles, state.plants]);
+  const selectedTechnician = state.selectedTechnician === 'Tutti'
+    ? 'Tutti'
+    : technicians.find((item) => sameTechnician(item, state.selectedTechnician)) || state.selectedTechnician;
   const isDone = (plantId, interventionType) => interventionType === 'consumi'
     ? state.consumptions.some((item) => item.plantId === plantId && item.campaignId === state.activeConsumptionCampaignId)
     : state.interventions.some((item) =>
@@ -137,13 +144,13 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
       item.campaignId === state.activeCampaignByType[interventionType]
     );
   const visible = useMemo(() => state.plants.filter((plant) => {
-    const matchesTech = state.selectedTechnician === 'Tutti' || plant.tecnicoResponsabile === state.selectedTechnician;
+    const matchesTech = state.selectedTechnician === 'Tutti' || sameTechnician(plant.tecnicoResponsabile, state.selectedTechnician);
     const q = query.toLowerCase();
     const matchesQuery = !q || [plant.description, plant.comune, plant.via, plant.cap, plant.amministratore].some((value) => value?.toLowerCase().includes(q));
     const done = type !== 'all' && isDone(plant.id, type);
     return plant.active && matchesTech && matchesQuery && (type === 'all' || status === 'all' || (status === 'done' ? done : !done));
   }), [state, query, type, status]);
-  const progressPool = state.plants.filter((plant) => plant.active && (state.selectedTechnician === 'Tutti' || plant.tecnicoResponsabile === state.selectedTechnician));
+  const progressPool = state.plants.filter((plant) => plant.active && (state.selectedTechnician === 'Tutti' || sameTechnician(plant.tecnicoResponsabile, state.selectedTechnician)));
   const completed = type === 'all' ? 0 : progressPool.filter((plant) => isDone(plant.id, type)).length;
   const flash = (text) => { setNotice(text); window.setTimeout(() => setNotice(''), 2800); };
   const canOperate = (plant) => isAdmin || plant.assignedTo === session.user.id;
@@ -232,7 +239,7 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
       <button className="icon-button" aria-label="Apri impostazioni" onClick={() => setPanel('settings')}><Menu size={22}/></button>
     </header>
     <section className="controls">
-      <label className="select-wrap">Tecnico <select value={state.selectedTechnician} onChange={(e) => setState((current) => ({ ...current, selectedTechnician: e.target.value }))}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select><ChevronDown size={18}/></label>
+      <label className="select-wrap">Tecnico <select value={selectedTechnician} onChange={(e) => setState((current) => ({ ...current, selectedTechnician: e.target.value }))}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select><ChevronDown size={18}/></label>
       <label className="search"><Search size={19}/><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca nome, via, comune…" />{query && <button onClick={() => setQuery('')} aria-label="Cancella ricerca"><X size={17}/></button>}</label>
     </section>
     <section className="filters">
@@ -277,9 +284,10 @@ function PlantHeading({ plant, operating, onEdit, onHistory }) {
 }
 function OperatingBadge({ status }) { const label = status === 'on' ? 'Acceso' : status === 'off' ? 'Spento' : 'Stato non registrato'; return <span className={`operating-badge ${status}`} title={label}><i/>{label}</span>; }
 function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechnician, onLogout, onUsers, onExcel, onExport, onConsumptionExport, onRestore, onSeason, onSeasons, onMap, onMigrate }) {
+  const selected = state.selectedTechnician === 'Tutti' ? 'Tutti' : technicians.find((item) => sameTechnician(item, state.selectedTechnician)) || state.selectedTechnician;
   return <Modal title="Impostazioni" onClose={onClose}><div className="settings-list">
     <div className="admin-session"><UserRound/><span><strong>{isAdmin ? 'Amministratore' : profile.full_name || profile.technician_name || 'Tecnico'}</strong><small>{profile.email}</small></span><button onClick={onLogout}>Esci</button></div>
-    <label className="settings-select"><UserRound/><span><strong>Tecnico</strong><small>Impianti visualizzati</small></span><select value={state.selectedTechnician} onChange={(e) => onTechnician(e.target.value)}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select></label>
+    <label className="settings-select"><UserRound/><span><strong>Tecnico</strong><small>Impianti visualizzati</small></span><select value={selected} onChange={(e) => onTechnician(e.target.value)}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select></label>
     {isAdmin && <SettingButton icon={<Upload/>} title="Importa Excel" note="Aggiorna l’elenco impianti" onClick={onExcel}/>}
     {isAdmin && <SettingButton icon={<UserRound/>} title="Gestione utenti" note="Crea tecnici con password provvisoria" onClick={onUsers}/>}
     <SettingButton icon={<Download/>} title="Esporta backup" note="Salva impianti, storico e stagioni" onClick={onExport}/>
