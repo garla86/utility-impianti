@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isInvitationCallback } from './authFlow';
+import { isInvitationCallback, mustChangeTemporaryPassword } from './authFlow';
 
 describe('isInvitationCallback', () => {
   it('riconosce il marcatore aggiunto al link di invito', () => {
@@ -12,5 +12,13 @@ describe('isInvitationCallback', () => {
 
   it('non modifica il normale accesso', () => {
     expect(isInvitationCallback({ search: '', hash: '' })).toBe(false);
+  });
+});
+
+describe('mustChangeTemporaryPassword', () => {
+  it('obbliga il cambio solo per gli account con password provvisoria', () => {
+    expect(mustChangeTemporaryPassword({ user_metadata: { must_change_password: true } })).toBe(true);
+    expect(mustChangeTemporaryPassword({ user_metadata: { must_change_password: false } })).toBe(false);
+    expect(mustChangeTemporaryPassword(null)).toBe(false);
   });
 });
