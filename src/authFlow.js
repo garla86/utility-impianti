@@ -10,3 +10,7 @@ export function clearInvitationCallback() {
   url.hash = '';
   window.history.replaceState({}, document.title, `${url.pathname}${url.search}`);
 }
+
+export function mustChangeTemporaryPassword(user) {
+  return user?.user_metadata?.must_change_password === true;
+}

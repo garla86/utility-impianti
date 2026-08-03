@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { readPlantsFromExcel } from './excel';
 import { importPlanMessage, planPlantImport } from './importSync';
-import { clearInvitationCallback, isInvitationCallback } from './authFlow';
+import { clearInvitationCallback, isInvitationCallback, mustChangeTemporaryPassword } from './authFlow';
 import { ALL_TYPES, downloadBackup, loadState, migrateState, saveState } from './storage';
 import { downloadConsumptions } from './consumptionExport';
 import { supabase } from './supabase';
@@ -30,7 +30,7 @@ const operatingStatus = (interventions) => {
   return latest?.type === 'accensione' ? 'on' : latest?.type === 'spegnimento' ? 'off' : 'unknown';
 };
 function LoadingScreen({ text }) { return <main className="auth-shell"><div className="auth-card"><Wrench size={34}/><h1>Utility Impianti</h1><p>{text}</p></div></main>; }
-function InvitationSetup({ session, onComplete }) {
+function PasswordSetup({ session, temporary, onComplete }) {
   const fullName = session.user.user_metadata?.full_name || '';
   const technicianName = session.user.user_metadata?.technician_name || '';
   const [password, setPassword] = useState('');
@@ -43,7 +43,10 @@ function InvitationSetup({ session, onComplete }) {
     if (password !== confirmPassword) return setMessage('Le password non coincidono.');
     setBusy(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
+      const { error } = await supabase.auth.updateUser({
+        password,
+        data: { ...session.user.user_metadata, must_change_password: false }
+      });
       if (error) throw error;
       clearInvitationCallback();
       onComplete();
@@ -53,7 +56,7 @@ function InvitationSetup({ session, onComplete }) {
       setBusy(false);
     }
   };
-  return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Prima attivazione</p><h1>Benvenuto</h1><p>Conferma i tuoi dati e scegli la password personale.</p><div className="activation-identity"><strong>{fullName || session.user.email}</strong>{technicianName && <small>Tecnico associato: {technicianName}</small>}<small>{session.user.email}</small></div><form className="form" onSubmit={submit}><label>Nuova password<input type="password" minLength="8" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required/></label><label>Conferma password<input type="password" minLength="8" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required/></label>{message && <p className="form-error">{message}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Attendere…' : 'Attiva il mio account'}</button></form></section></main>;
+  return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Prima attivazione</p><h1>Benvenuto</h1><p>{temporary ? 'La password provvisoria deve essere sostituita prima di utilizzare l’app.' : 'Conferma i tuoi dati e scegli la password personale.'}</p><div className="activation-identity"><strong>{fullName || session.user.email}</strong>{technicianName && <small>Tecnico associato: {technicianName}</small>}<small>{session.user.email}</small></div><form className="form" onSubmit={submit}><label>Nuova password<input type="password" minLength="8" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} required/></label><label>Conferma password<input type="password" minLength="8" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required/></label>{message && <p className="form-error">{message}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Attendere…' : 'Salva la mia password'}</button></form></section></main>;
 }
 function AuthScreen() {
   const [email, setEmail] = useState('');
@@ -77,6 +80,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [invitationSetup, setInvitationSetup] = useState(isInvitationCallback);
   const [invitationError, setInvitationError] = useState(false);
+  const [passwordChangeComplete, setPasswordChangeComplete] = useState(false);
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); });
     const { data } = supabase.auth.onAuthStateChange((_event, next) => { setSession(next); setReady(true); });
@@ -87,6 +91,7 @@ export default function App() {
     const timer = window.setTimeout(() => setInvitationError(true), 8000);
     return () => window.clearTimeout(timer);
   }, [invitationSetup, session, ready]);
+  useEffect(() => setPasswordChangeComplete(false), [session?.user?.id]);
   useEffect(() => {
     if (!session) { setProfile(null); return; }
     Promise.all([loadProfile(session.user.id), loadProfiles()])
@@ -97,7 +102,8 @@ export default function App() {
   if (!session && invitationSetup && !invitationError) return <LoadingScreen text="Verifica dell’invito in corso…"/>;
   if (!session && invitationSetup) return <main className="auth-shell"><section className="auth-card"><Wrench size={34}/><p className="eyebrow">Invito non completato</p><h1>Utility Impianti</h1><p>Non è stato possibile verificare questo invito. Apri nuovamente il collegamento originale ricevuto via email oppure chiedi all’amministratore un nuovo invito.</p><button className="auth-submit" onClick={() => { clearInvitationCallback(); setInvitationSetup(false); setInvitationError(false); }}>Vai all’accesso</button></section></main>;
   if (!session) return <AuthScreen/>;
-  if (invitationSetup) return <InvitationSetup session={session} onComplete={() => setInvitationSetup(false)}/>;
+  const temporaryPassword = mustChangeTemporaryPassword(session.user);
+  if (!passwordChangeComplete && (invitationSetup || temporaryPassword)) return <PasswordSetup session={session} temporary={temporaryPassword} onComplete={() => { setInvitationSetup(false); setPasswordChangeComplete(true); }}/>;
   if (!profile) return <LoadingScreen text="Caricamento profilo…"/>;
   return <WorkspaceApp session={session} profile={profile} profiles={profiles} refreshProfiles={async () => setProfiles(await loadProfiles())}/>;
 }
@@ -254,7 +260,7 @@ function WorkspaceApp({ session, profile, profiles, refreshProfiles }) {
     {panel === 'season' && <SeasonModal onClose={() => setPanel('settings')} onStart={startSeason}/>}
     {panel === 'seasons' && <SeasonsModal campaigns={state.campaigns} activeIds={new Set([...Object.values(state.activeCampaignByType), state.activeConsumptionCampaignId])} onClose={() => setPanel('settings')} onDelete={async (campaign) => { if (!window.confirm(`Eliminare definitivamente la stagione “${campaign.name}” e tutti i dati collegati?`)) return; try { await cloudDeleteSeason(campaign.id); await refreshCloud(); flash('Stagione precedente eliminata.'); } catch (error) { alert(error.message); } }}/>}
     {panel === 'map' && <MapModal plants={visible} technician={state.selectedTechnician} type={type} status={status} onClose={() => setPanel(null)}/>}
-    {panel === 'users' && <UsersModal profiles={profiles} onClose={() => setPanel('settings')} onInvite={async (details) => { await inviteTechnician(details); await refreshProfiles(); flash('Invito inviato al tecnico.'); }}/>}
+    {panel === 'users' && <UsersModal profiles={profiles} onClose={() => setPanel('settings')} onInvite={async (details) => { await inviteTechnician(details); await refreshProfiles(); flash('Utente creato. Comunica la password provvisoria al tecnico.'); }}/>} 
     {!cloudReady && <div className="sync-banner">Sincronizzazione dati…</div>}
   </main>;
 }
@@ -275,7 +281,7 @@ function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechni
     <div className="admin-session"><UserRound/><span><strong>{isAdmin ? 'Amministratore' : profile.full_name || profile.technician_name || 'Tecnico'}</strong><small>{profile.email}</small></span><button onClick={onLogout}>Esci</button></div>
     <label className="settings-select"><UserRound/><span><strong>Tecnico</strong><small>Impianti visualizzati</small></span><select value={state.selectedTechnician} onChange={(e) => onTechnician(e.target.value)}><option>Tutti</option>{technicians.map((tech) => <option key={tech}>{tech}</option>)}</select></label>
     {isAdmin && <SettingButton icon={<Upload/>} title="Importa Excel" note="Aggiorna l’elenco impianti" onClick={onExcel}/>}
-    {isAdmin && <SettingButton icon={<UserRound/>} title="Gestione utenti" note="Invita tecnici tramite email" onClick={onUsers}/>}
+    {isAdmin && <SettingButton icon={<UserRound/>} title="Gestione utenti" note="Crea tecnici con password provvisoria" onClick={onUsers}/>}
     <SettingButton icon={<Download/>} title="Esporta backup" note="Salva impianti, storico e stagioni" onClick={onExport}/>
     {isAdmin && <SettingButton icon={<FileSpreadsheet/>} title="Scarica consumi" note="Genera un file Excel della stagione corrente" onClick={onConsumptionExport}/>}
     {isAdmin && <SettingButton icon={<ArchiveRestore/>} title="Ripristina backup" note="Compatibile anche con i backup V1" onClick={onRestore}/>}
@@ -287,12 +293,18 @@ function SettingsModal({ state, technicians, isAdmin, profile, onClose, onTechni
   </div></Modal>;
 }
 function SettingButton({ icon, title, note, onClick }) { return <button className="setting-button" onClick={onClick}>{icon}<span><strong>{title}</strong><small>{note}</small></span><span>›</span></button>; }
+function generateTemporaryPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  return Array.from(bytes, (item) => alphabet[item % alphabet.length]).join('');
+}
 function UsersModal({ profiles, onClose, onInvite }) {
-  const [draft, setDraft] = useState({ email: '', fullName: '', technicianName: '' });
+  const emptyUser = { email: '', fullName: '', technicianName: '', temporaryPassword: '' };
+  const [draft, setDraft] = useState(emptyUser);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const set = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
-  return <Modal title="Gestione utenti" onClose={onClose}><form className="form user-invite" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await onInvite(draft); setDraft({ email: '', fullName: '', technicianName: '' }); } catch (inviteError) { setError(inviteError.message); } finally { setBusy(false); } }}><Field label="Email tecnico" value={draft.email} onChange={(value) => set('email', value)} required/><Field label="Nome e cognome" value={draft.fullName} onChange={(value) => set('fullName', value)} required/><Field label="Tecnico associato" value={draft.technicianName} onChange={(value) => set('technicianName', value)} required/>{error && <p className="form-error">{error}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Invio…' : 'Invia invito'}</button></form><div className="user-list"><h3>Utenti configurati</h3>{profiles.map((item) => <div key={item.id}><span><strong>{item.full_name || item.email}</strong><small>{item.email} · {item.technician_name || item.role}</small></span><i className={item.active ? 'active' : ''}>{item.active ? 'Attivo' : 'Disattivo'}</i></div>)}</div></Modal>;
+  return <Modal title="Gestione utenti" onClose={onClose}><form className="form user-invite" onSubmit={async (event) => { event.preventDefault(); setBusy(true); setError(''); try { await onInvite(draft); setDraft(emptyUser); } catch (inviteError) { setError(inviteError.message); } finally { setBusy(false); } }}><Field label="Email tecnico" value={draft.email} onChange={(value) => set('email', value)} required/><Field label="Nome e cognome" value={draft.fullName} onChange={(value) => set('fullName', value)} required/><Field label="Tecnico associato" value={draft.technicianName} onChange={(value) => set('technicianName', value)} required/><label>Password provvisoria<input type="text" minLength="8" autoComplete="off" value={draft.temporaryPassword} onChange={(event) => set('temporaryPassword', event.target.value)} required/><small>Il tecnico dovrà cambiarla obbligatoriamente al primo accesso.</small></label><button type="button" className="secondary" onClick={() => set('temporaryPassword', generateTemporaryPassword())}>Genera password provvisoria</button>{error && <p className="form-error">{error}</p>}<button className="auth-submit" disabled={busy}>{busy ? 'Creazione…' : 'Crea utente'}</button></form><div className="user-list"><h3>Utenti configurati</h3>{profiles.map((item) => <div key={item.id}><span><strong>{item.full_name || item.email}</strong><small>{item.email} · {item.technician_name || item.role}</small></span><i className={item.active ? 'active' : ''}>{item.active ? 'Attivo' : 'Disattivo'}</i></div>)}</div></Modal>;
 }
 function SeasonModal({ onClose, onStart }) {
   const [name, setName] = useState(`Stagione ${new Date().getFullYear() + 1}`);
